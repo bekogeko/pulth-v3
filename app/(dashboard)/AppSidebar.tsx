@@ -1,10 +1,11 @@
 import {Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail} from "@/components/ui/sidebar";
+import {NavUser} from "@/app/(dashboard)/NavUser";
 
 export function AppSidebar() {
     return (
-        <Sidebar collapsible="icon" {...props}>
+        <Sidebar collapsible="icon">
             <SidebarHeader>
-                <TeamSwitcher teams={data.teams} />
+                {/*<TeamSwitcher teams={data.teams} />*/}
             </SidebarHeader>
             <SidebarContent>
                 {/*<NavMain items={data.navMain} />*/}
