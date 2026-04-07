@@ -1,15 +1,17 @@
+import {Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarRail} from "@/components/ui/sidebar";
+
 export function AppSidebar() {
     return (
-        <pnpm dlx shadcn@latest add dropdown-menuSidebar collapsible="icon" {...props}>
+        <Sidebar collapsible="icon" {...props}>
             <SidebarHeader>
                 <TeamSwitcher teams={data.teams} />
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={data.navMain} />
-                <NavProjects projects={data.projects} />
+                {/*<NavMain items={data.navMain} />*/}
+                {/*<NavProjects projects={data.projects} />*/}
             </SidebarContent>
             <SidebarFooter>
-                <NavUser user={data.user} />
+                <NavUser />
             </SidebarFooter>
             <SidebarRail />
         </Sidebar>
