@@ -3,7 +3,7 @@ import {database} from "@/lib/database";
 import {questionOptionTable, questionTable, quizTable} from "@/db/schema";
 import {revalidatePath} from "next/cache";
 import {auth} from "@clerk/nextjs/server";
-import {count, eq} from "drizzle-orm";
+import {count, eq, sql} from "drizzle-orm";
 
 type CreateQuestionState = {
     status: "idle" | "success" | "error";
@@ -83,4 +83,48 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
     } catch {
         return {status: "error", message: "Unable to save the question right now."};
     }
+}
+
+export async function getQuizBySlug(slug: string){
+    return database
+        .select()
+        .from(quizTable)
+        .where(eq(quizTable.slug, slug))
+}
+
+export async function getQuestionsBySlug(slug: string){
+    const quiz = await database
+        .select({id: quizTable.id})
+        .from(quizTable)
+        .where(eq(quizTable.slug, slug))
+        .limit(1)
+        .then((results) => results[0]);
+
+    if (!quiz) {
+        throw new Error("Quiz not found");
+    }
+
+    return database
+        .select({
+            id: questionTable.id,
+            question: questionTable.question,
+            options: sql<
+                { id: number; option: string; isCorrect: boolean }[]
+            >`json_agg(
+                json_build_object(
+                  'id', ${questionOptionTable.id},
+                  'option', ${questionOptionTable.option},
+                  'isCorrect', ${questionOptionTable.isCorrect}
+                )
+                order by ${questionOptionTable.id}
+            ) FILTER (WHERE ${questionOptionTable.id} IS NOT NULL)`,
+        })
+        .from(questionTable)
+        .leftJoin(
+            questionOptionTable,
+            eq(questionTable.id, questionOptionTable.questionId)
+        )
+        .where(eq(questionTable.quizId, quiz.id))
+        .groupBy(questionTable.id, questionTable.question);
+
 }

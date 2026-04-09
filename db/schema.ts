@@ -6,7 +6,7 @@ export const quizTable = pgTable("quizzes", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     title: varchar({ length: 255 }).notNull(),
     description: varchar({ length: 255 }).notNull(),
-    slug: varchar({ length: 127 }).notNull(),
+    slug: varchar({ length: 127 }).unique().notNull(),
 });
 
 export const questionTable = pgTable("questions", {
