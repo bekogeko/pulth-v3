@@ -11,6 +11,7 @@ export const quizTable = pgTable("quizzes", {
 export const questionTable = pgTable("questions", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     question: varchar({ length: 255 }).notNull(),
+    body: varchar({ length: 255 }),
     ownerId: varchar({length:255}).notNull(),
 })
 
