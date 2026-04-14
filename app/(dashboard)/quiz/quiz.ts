@@ -75,11 +75,15 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
         const [question] = await database
             .insert(questionTable)
             .values({
-                quizId:quizId,
                 question: prompt,
                 ownerId: userId,
             })
             .returning({id: questionTable.id});
+
+        database.insert(quizQuestion).values({
+            quizId: quizId,
+            questionId: question.id,
+        });
 
         await database.insert(questionOptionTable).values(
             options.map((option, idx) => ({
