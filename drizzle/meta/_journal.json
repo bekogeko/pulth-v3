@@ -43,6 +43,13 @@
       "when": 1776178528071,
       "tag": "0005_gorgeous_lizard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776182336385,
+      "tag": "0006_salty_yellow_claw",
+      "breakpoints": true
     }
   ]
 }
