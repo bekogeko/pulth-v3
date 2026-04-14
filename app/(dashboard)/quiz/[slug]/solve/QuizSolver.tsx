@@ -4,6 +4,7 @@ import {useState} from "react";
 import {useQuery} from "@tanstack/react-query";
 
 import {getQuestionsBySlug, getQuizBySlug} from "@/app/(dashboard)/quiz/quiz";
+import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
@@ -123,7 +124,8 @@ export function QuizSolver({slug}: QuizSolverProps) {
                                     {question.question}
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="space-y-4">
+                                <QuestionBodyBlock body={question.body} />
                                 <RadioGroup
                                     value={selectedOptions[question.questionId!]}
                                     onValueChange={(value) => {
