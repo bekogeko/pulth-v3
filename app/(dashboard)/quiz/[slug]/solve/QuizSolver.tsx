@@ -114,7 +114,7 @@ export function QuizSolver({slug}: QuizSolverProps) {
             {!isLoading && !isError ? (
                 <div className="space-y-4">
                     {questions?.map((question, index) => (
-                        <Card key={question.id}>
+                        <Card key={question.questionId}>
                             <CardHeader className="gap-3">
                                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
                                     Question {index + 1}
@@ -125,18 +125,18 @@ export function QuizSolver({slug}: QuizSolverProps) {
                             </CardHeader>
                             <CardContent>
                                 <RadioGroup
-                                    value={selectedOptions[question.id]}
+                                    value={selectedOptions[question.questionId!]}
                                     onValueChange={(value) => {
                                         setSelectedOptions((prev) => ({
                                             ...prev,
-                                            [question.id]: value,
+                                            [question.questionId!]: value,
                                         }));
                                     }}
                                     className="gap-3"
                                 >
                                     {question.options.map((option) => {
-                                        const optionId = `question-${question.id}-option-${option.id}`;
-                                        const isSelected = selectedOptions[question.id] === String(option.id);
+                                        const optionId = `question-${question.questionId}-option-${option.id}`;
+                                        const isSelected = selectedOptions[question.questionId!] === String(option.id);
 
                                         return (
                                             <Label
@@ -180,7 +180,7 @@ export function QuizSolver({slug}: QuizSolverProps) {
                                     {questions.length - answeredCount} remaining
                                 </p>
                             </div>
-                            <Button disabled={answeredCount !== questions.length} size="lg">
+                            <Button disabled={answeredCount !== questions.length} size="lg" type="submit">
                                 Submit Answers
                             </Button>
                         </CardContent>

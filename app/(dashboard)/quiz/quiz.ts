@@ -1,6 +1,6 @@
 "use server"
 import {database} from "@/lib/database";
-import {questionOptionTable, questionTable, quizTable} from "@/db/schema";
+import {questionOptionTable, questionTable, quizQuestion, quizTable} from "@/db/schema";
 import {revalidatePath} from "next/cache";
 import {auth} from "@clerk/nextjs/server";
 import {count, eq, sql} from "drizzle-orm";
@@ -12,17 +12,29 @@ type CreateQuestionState = {
 };
 
 export async function getAllQuizzes (){
+    // return database
+    //     .select({
+    //         id: quizTable.id,
+    //         slug: quizTable.slug,
+    //         title: quizTable.title,
+    //         description: quizTable.description,
+    //         questionCount: count(questionTable.id),
+    //     })
+    //     .from(quizTable)
+    //     .leftJoin(questionTable, eq(quizTable.id, questionTable.quizId))
+    //     .groupBy(quizTable.id, quizTable.slug, quizTable.title, quizTable.description);
     return database
         .select({
             id: quizTable.id,
             slug: quizTable.slug,
-            title: quizTable.title,
-            description: quizTable.description,
-            questionCount: count(questionTable.id),
+            title:quizTable.title,
+            description:quizTable.description,
+            questionCount: count(quizQuestion.quizId),
         })
         .from(quizTable)
-        .leftJoin(questionTable, eq(quizTable.id, questionTable.quizId))
-        .groupBy(quizTable.id, quizTable.slug, quizTable.title, quizTable.description);
+        .leftJoin(quizQuestion, eq(quizTable.id, quizQuestion.quizId))
+        .groupBy(quizTable.id)
+
 }
 
 export async function createQuestion(_prevState: CreateQuestionState, formData: FormData): Promise<CreateQuestionState> {
@@ -104,27 +116,25 @@ export async function getQuestionsBySlug(slug: string){
         throw new Error("Quiz not found");
     }
 
-    return database
-        .select({
-            id: questionTable.id,
-            question: questionTable.question,
-            options: sql<
-                { id: number; option: string; isCorrect: boolean }[]
-            >`json_agg(
-                json_build_object(
-                  'id', ${questionOptionTable.id},
-                  'option', ${questionOptionTable.option},
-                  'isCorrect', ${questionOptionTable.isCorrect}
-                )
-                order by ${questionOptionTable.id}
+    return database.select({
+        quizId: quizQuestion.quizId,
+        questionId: quizQuestion.questionId,
+        question: questionTable.question,
+        options: sql<{id:number,option:string,isCorrect:boolean}[]>`json_agg(
+        json_build_object(
+            'id', ${questionOptionTable.id},
+            'option', ${questionOptionTable.option},
+            'isCorrect', ${questionOptionTable.isCorrect}
+            )
             ) FILTER (WHERE ${questionOptionTable.id} IS NOT NULL)`,
-        })
-        .from(questionTable)
-        .leftJoin(
-            questionOptionTable,
-            eq(questionTable.id, questionOptionTable.questionId)
+    }).from(quizQuestion)
+        .innerJoin(questionTable, eq(questionTable.id, quizQuestion.questionId))
+        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
+        .where(eq(quizQuestion.quizId, quiz.id))
+        .groupBy(
+            quizQuestion.quizId,
+            quizQuestion.questionId,
+            questionTable.id,
+            questionTable.question
         )
-        .where(eq(questionTable.quizId, quiz.id))
-        .groupBy(questionTable.id, questionTable.question);
-
 }
