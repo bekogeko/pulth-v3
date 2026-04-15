@@ -32,6 +32,7 @@ export const questionOptionTable = pgTable("question_options", {
 export const conceptTable = pgTable("concepts", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    description: varchar({ length: 255 }),
 })
 
 export const questionConcepts = pgTable("question_concepts", {
