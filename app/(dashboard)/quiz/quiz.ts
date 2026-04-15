@@ -124,6 +124,7 @@ export async function getQuestionsBySlug(slug: string){
         quizId: quizQuestion.quizId,
         questionId: quizQuestion.questionId,
         question: questionTable.question,
+        body:questionTable.body,
         options: sql<{id:number,option:string,isCorrect:boolean}[]>`json_agg(
         json_build_object(
             'id', ${questionOptionTable.id},
