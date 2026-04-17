@@ -99,6 +99,23 @@ export async function getMyQuestions (){
                   on ${conceptTable.id} = ${questionConcepts.conceptId}
                 where ${questionConcepts.questionId} = ${questionTable.id}
               ), '[]'::json)`,
+            quizzes:sql<{ id: number; title: string; description: string; slug: string }[]>`
+              coalesce((
+                select json_agg(
+                  json_build_object(
+                    'id', ${quizTable.id},
+                    'title', ${quizTable.title},
+                    'description', ${quizTable.description},
+                    'slug', ${quizTable.slug}
+                  )
+                  order by ${quizTable.id}
+                )
+                from ${quizQuestion}
+                inner join ${quizTable}
+                  on ${quizTable.id} = ${quizQuestion.quizId}
+                where ${quizQuestion.questionId} = ${questionTable.id}
+              ), '[]'::json)
+            `,
         })
         .from(quizQuestion)
         .innerJoin(questionTable, eq(questionTable.id, quizQuestion.questionId))

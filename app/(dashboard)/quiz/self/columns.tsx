@@ -20,6 +20,12 @@ export type Question = {
     id: number;
     question: string;
     body: string | null;
+    quizzes: {
+        id: number;
+        title: string;
+        description: string;
+        slug: string
+    }[];
     options: {
         id: number;
         option: string;
@@ -47,6 +53,11 @@ export const columns: ColumnDef<Question>[] = [
     {
         accessorKey: "question",
         header: "Question",
+    },
+    {
+        accessorKey: "quizzes",
+        accessorFn: (question) => question.quizzes.map((quiz) => quiz.title).join(", "),
+        header: "Concepts",
     },
     {
         accessorKey: "options",
