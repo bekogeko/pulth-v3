@@ -12,6 +12,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {CheckCircle2, Loader2, Plus} from "lucide-react";
 import {Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger} from "@/components/ui/dialog";
 import {toast} from "sonner";
+import Link from "next/link";
 
 type CreateQuestionState = Awaited<ReturnType<typeof createQuestion>>;
 type Quizzes = Awaited<ReturnType<typeof getAllQuizzes>>;
@@ -22,32 +23,14 @@ export default function Quiz() {
         queryFn: getAllQuizzes,
     });
 
-    const [isCreateQuestionOpen, setIsCreateQuestionOpen] = useState(false);
-
     return (
         <div className="flex flex-col gap-6 p-6">
             <div className="flex justify-start">
-                <Dialog open={isCreateQuestionOpen} onOpenChange={setIsCreateQuestionOpen}>
-                    <DialogTrigger asChild>
-                        <Button size="lg">
-                            <Plus className="size-4" />
-                            Create Question
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-h-[85vh] overflow-y-auto p-0 sm:max-w-2xl">
-                        <DialogHeader className="sr-only">
-                            <DialogTitle>Create Question</DialogTitle>
-                            <DialogDescription>
-                                Add a prompt and multiple-choice options to a quiz.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <CreateQuestionForm
-                            quizzes={quizzes}
-                            isLoading={isLoading}
-                            onSuccess={() => setIsCreateQuestionOpen(false)}
-                        />
-                    </DialogContent>
-                </Dialog>
+                <Button variant={"link"}>
+                    <Link href={"/quiz/self"} className="flex items-center gap-2">
+                        My Questions
+                    </Link>
+                </Button>
             </div>
 
             <div className="space-y-3">

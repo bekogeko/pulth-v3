@@ -1,9 +1,9 @@
 "use server"
 import {database} from "@/lib/database";
-import {questionOptionTable, questionTable, quizQuestion, quizTable} from "@/db/schema";
+import {conceptTable, questionConcepts, questionOptionTable, questionTable, quizQuestion, quizTable} from "@/db/schema";
 import {revalidatePath} from "next/cache";
 import {auth} from "@clerk/nextjs/server";
-import {count, eq, sql} from "drizzle-orm";
+import {and, asc, count, eq, inArray, sql} from "drizzle-orm";
 
 type CreateQuestionState = {
     status: "idle" | "success" | "error";
@@ -11,18 +11,17 @@ type CreateQuestionState = {
     resetKey?: string;
 };
 
+type UpdateQuestionConceptsInput = {
+    questionId: number;
+    conceptIds: number[];
+};
+
+type UpdateQuestionConceptsState = {
+    status: "success" | "error";
+    message: string;
+};
+
 export async function getAllQuizzes (){
-    // return database
-    //     .select({
-    //         id: quizTable.id,
-    //         slug: quizTable.slug,
-    //         title: quizTable.title,
-    //         description: quizTable.description,
-    //         questionCount: count(questionTable.id),
-    //     })
-    //     .from(quizTable)
-    //     .leftJoin(questionTable, eq(quizTable.id, questionTable.quizId))
-    //     .groupBy(quizTable.id, quizTable.slug, quizTable.title, quizTable.description);
     return database
         .select({
             id: quizTable.id,
@@ -34,7 +33,65 @@ export async function getAllQuizzes (){
         .from(quizTable)
         .leftJoin(quizQuestion, eq(quizTable.id, quizQuestion.quizId))
         .groupBy(quizTable.id)
+}
 
+export async function getAllConcepts() {
+    return database
+        .select({
+            id: conceptTable.id,
+            name: conceptTable.name,
+        })
+        .from(conceptTable)
+        .orderBy(asc(conceptTable.name));
+}
+
+export async function getMyQuestions (){
+    const {isAuthenticated,userId} = await auth();
+
+    if(!isAuthenticated){
+        // bad req
+        return [];
+    }
+
+    return database
+        .select({
+            id: questionTable.id,
+            quizId: quizQuestion.quizId,
+            question: questionTable.question,
+            body: questionTable.body,
+
+            options: sql<{ id: number; option: string; isCorrect: boolean }[]>`
+              coalesce((
+                select json_agg(
+                  json_build_object(
+                    'id', ${questionOptionTable.id},
+                    'option', ${questionOptionTable.option},
+                    'isCorrect', ${questionOptionTable.isCorrect}
+                  )
+                  order by ${questionOptionTable.id}
+                )
+                from ${questionOptionTable}
+                where ${questionOptionTable.questionId} = ${questionTable.id}
+              ), '[]'::json)`,
+
+            concepts: sql<{ id: number; name: string }[]>`
+              coalesce((
+                select json_agg(
+                  json_build_object(
+                    'id', ${conceptTable.id},
+                    'name', ${conceptTable.name}
+                  )
+                  order by ${conceptTable.id}
+                )
+                from ${questionConcepts}
+                inner join ${conceptTable}
+                  on ${conceptTable.id} = ${questionConcepts.conceptId}
+                where ${questionConcepts.questionId} = ${questionTable.id}
+              ), '[]'::json)`,
+        })
+        .from(quizQuestion)
+        .innerJoin(questionTable, eq(questionTable.id, quizQuestion.questionId))
+        .where(eq(questionTable.ownerId,userId));
 }
 
 export async function createQuestion(_prevState: CreateQuestionState, formData: FormData): Promise<CreateQuestionState> {
@@ -98,6 +155,89 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
         return {status: "success", resetKey: crypto.randomUUID()};
     } catch {
         return {status: "error", message: "Unable to save the question right now."};
+    }
+}
+
+export async function updateQuestionConcepts({
+    questionId,
+    conceptIds,
+}: UpdateQuestionConceptsInput): Promise<UpdateQuestionConceptsState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            status: "error",
+            message: "You must be signed in to update concepts.",
+        };
+    }
+
+    if (!Number.isInteger(questionId)) {
+        return {
+            status: "error",
+            message: "Question not found.",
+        };
+    }
+
+    const uniqueConceptIds = [...new Set(conceptIds)]
+        .filter((conceptId) => Number.isInteger(conceptId));
+
+    const [ownedQuestion] = await database
+        .select({id: questionTable.id})
+        .from(questionTable)
+        .where(and(
+            eq(questionTable.id, questionId),
+            eq(questionTable.ownerId, userId),
+        ))
+        .limit(1);
+
+    if (!ownedQuestion) {
+        return {
+            status: "error",
+            message: "Question not found or you do not have access to it.",
+        };
+    }
+
+    if (uniqueConceptIds.length > 0) {
+        const existingConcepts = await database
+            .select({id: conceptTable.id})
+            .from(conceptTable)
+            .where(inArray(conceptTable.id, uniqueConceptIds));
+
+        if (existingConcepts.length !== uniqueConceptIds.length) {
+            return {
+                status: "error",
+                message: "One or more concepts could not be found.",
+            };
+        }
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .delete(questionConcepts)
+                .where(eq(questionConcepts.questionId, questionId));
+
+            if (uniqueConceptIds.length > 0) {
+                await tx.insert(questionConcepts).values(
+                    uniqueConceptIds.map((conceptId) => ({
+                        questionId,
+                        conceptId,
+                    }))
+                );
+            }
+        });
+
+        revalidatePath("/quiz/self");
+
+        return {
+            status: "success",
+            message: "Concepts updated.",
+        };
+    } catch {
+        return {
+            status: "error",
+            message: "Unable to update concepts right now.",
+        };
     }
 }
 
