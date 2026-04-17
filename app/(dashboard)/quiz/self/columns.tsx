@@ -16,7 +16,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export type Quiz = {
+export type Question = {
     id: number;
     question: string;
     body: string | null;
@@ -31,7 +31,7 @@ export type Quiz = {
     }[];
 };
 
-export const columns: ColumnDef<Quiz>[] = [
+export const columns: ColumnDef<Question>[] = [
     {
         accessorKey: "id",
         header: "ID",
@@ -39,9 +39,9 @@ export const columns: ColumnDef<Quiz>[] = [
     {
         id: "actions",
         cell: ({row}) => {
-            const quiz = row.original;
+            const question = row.original;
 
-            return <RowActions quiz={quiz}/>;
+            return <RowActions question={question}/>;
         },
     },
     {
@@ -50,17 +50,17 @@ export const columns: ColumnDef<Quiz>[] = [
     },
     {
         accessorKey: "options",
-        accessorFn: (quiz) => quiz.options.length,
+        accessorFn: (question) => question.options.length,
         header: "Options",
     },
     {
         accessorKey: "concepts",
-        accessorFn: (quiz) => quiz.concepts.map((concept) => concept.name).join(", "),
+        accessorFn: (question) => question.concepts.map((concept) => concept.name).join(", "),
         header: "Concepts",
     },
 ];
 
-function RowActions({quiz}: { quiz: Quiz }) {
+function RowActions({question}: { question: Question }) {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
 
@@ -89,10 +89,10 @@ function RowActions({quiz}: { quiz: Quiz }) {
                 <EditConceptsDialog
                     open={isEditDialogOpen}
                     onOpenChange={setIsEditDialogOpen}
-                    questionId={quiz.id}
-                    question={quiz.question}
-                    body={quiz.body}
-                    concepts={quiz.concepts}
+                    questionId={question.id}
+                    question={question.question}
+                    body={question.body}
+                    concepts={question.concepts}
                 />
             ) : null}
 
@@ -100,10 +100,10 @@ function RowActions({quiz}: { quiz: Quiz }) {
                 <EditOptionsDialog
                     open={isOptionDialogOpen}
                     onOpenChange={setIsOptionDialogOpen}
-                    questionId={quiz.id}
-                    question={quiz.question}
-                    body={quiz.body}
-                    options={quiz.options}
+                    questionId={question.id}
+                    question={question.question}
+                    body={question.body}
+                    options={question.options}
                 />
             ) : null}
         </>
