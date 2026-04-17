@@ -12,6 +12,7 @@ export default function PosthogIdentifier(){
         if(isSignedIn && userId && user && !posthog._isIdentified()){
             posthog.identify(userId,{
                 email:user.primaryEmailAddress,
+                userId: userId,
             });
         }
     },[userId,user,isSignedIn]);
