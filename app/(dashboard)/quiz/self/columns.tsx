@@ -15,6 +15,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {EditQuizzesDialog} from "@/app/(dashboard)/quiz/self/edit-quizzes-dialog";
 
 export type Question = {
     id: number;
@@ -74,6 +75,7 @@ export const columns: ColumnDef<Question>[] = [
 function RowActions({question}: { question: Question }) {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
+    const [isQuizzesDialogOpen, setIsQuizzesDialogOpen] = useState(false);
 
     return (
         <>
@@ -87,7 +89,9 @@ function RowActions({question}: { question: Question }) {
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                     <DropdownMenuSeparator/>
-                    <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
+                    <DropdownMenuItem onSelect={() => setIsQuizzesDialogOpen(true)}>
+                        Edit Quizzes
+                    </DropdownMenuItem><DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
                         Edit Concepts
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setIsOptionDialogOpen(true)}>
@@ -115,6 +119,17 @@ function RowActions({question}: { question: Question }) {
                     question={question.question}
                     body={question.body}
                     options={question.options}
+                />
+            ) : null}
+
+            {isQuizzesDialogOpen ? (
+                <EditQuizzesDialog
+                    open={isQuizzesDialogOpen}
+                    onOpenChange={setIsQuizzesDialogOpen}
+                    question={question.question}
+                    body={question.body}
+                    quizzes={question.quizzes}
+
                 />
             ) : null}
         </>
