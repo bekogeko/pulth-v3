@@ -21,6 +21,17 @@ type UpdateQuestionConceptsState = {
     message: string;
 };
 
+type UpdateQuestionOptionsInput = {
+    questionId: number;
+    options: string[];
+    correctIndex: number;
+};
+
+type UpdateQuestionOptionsState = {
+    status: "success" | "error";
+    message: string;
+};
+
 export async function getAllQuizzes (){
     return database
         .select({
@@ -237,6 +248,95 @@ export async function updateQuestionConcepts({
         return {
             status: "error",
             message: "Unable to update concepts right now.",
+        };
+    }
+}
+
+export async function updateQuestionOptions({
+    questionId,
+    options,
+    correctIndex,
+}: UpdateQuestionOptionsInput): Promise<UpdateQuestionOptionsState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            status: "error",
+            message: "You must be signed in to update options.",
+        };
+    }
+
+    if (!Number.isInteger(questionId)) {
+        return {
+            status: "error",
+            message: "Question not found.",
+        };
+    }
+
+    const normalizedOptions = options.map((option) => option.trim());
+
+    if (normalizedOptions.length === 0) {
+        return {
+            status: "error",
+            message: "Add at least one option.",
+        };
+    }
+
+    if (normalizedOptions.some((option) => option.length === 0)) {
+        return {
+            status: "error",
+            message: "Options cannot be empty.",
+        };
+    }
+
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= normalizedOptions.length) {
+        return {
+            status: "error",
+            message: "Choose the correct option.",
+        };
+    }
+
+    const [ownedQuestion] = await database
+        .select({id: questionTable.id})
+        .from(questionTable)
+        .where(and(
+            eq(questionTable.id, questionId),
+            eq(questionTable.ownerId, userId),
+        ))
+        .limit(1);
+
+    if (!ownedQuestion) {
+        return {
+            status: "error",
+            message: "Question not found or you do not have access to it.",
+        };
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .delete(questionOptionTable)
+                .where(eq(questionOptionTable.questionId, questionId));
+
+            await tx.insert(questionOptionTable).values(
+                normalizedOptions.map((option, index) => ({
+                    questionId,
+                    option,
+                    isCorrect: index === correctIndex,
+                }))
+            );
+        });
+
+        revalidatePath("/quiz/self");
+
+        return {
+            status: "success",
+            message: "Options updated.",
+        };
+    } catch {
+        return {
+            status: "error",
+            message: "Unable to update options right now.",
         };
     }
 }
