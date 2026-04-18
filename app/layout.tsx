@@ -5,8 +5,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import QueryProvider from "@/components/providers/QueryProvider";
 import {Toaster} from "@/components/ui/sonner";
-import {PostHogProvider} from "posthog-js/react";
 import PosthogIdentifier from "@/components/providers/Posthog-Identifier";
+import {TooltipProvider} from "@/components/ui/tooltip";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'});
 
@@ -39,9 +39,11 @@ export default function RootLayout({
         <ClerkProvider>
           <PosthogIdentifier/>
           <Toaster/>
-          <QueryProvider>
-            {children}
-          </QueryProvider>
+          <TooltipProvider>
+            <QueryProvider>
+              {children}
+            </QueryProvider>
+          </TooltipProvider>
         </ClerkProvider>
       </body>
     </html>

@@ -13,7 +13,7 @@ export default function Quiz() {
     });
 
     return (
-        <div className="flex flex-col gap-6 p-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-6 p-6">
             <div className="space-y-3">
                 <div className="space-y-1">
                     <h2 className="text-lg font-semibold">Quizzes</h2>

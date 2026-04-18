@@ -172,7 +172,7 @@ export async function getMyQuestions (){
             quizzes: sql<QuizJson[]>`coalesce(${quizzesSq.quizzes}, '[]'::json)`,
             options: sql<OptionJson[]>`coalesce(${optionsSq.options}, '[]'::json)`,
         })
-        .from(questionTable)
+        .from(questionTable).where(eq(questionTable.ownerId, userId))
         .leftJoinLateral(conceptsSq, sql`true`)
         .leftJoinLateral(quizzesSq, sql`true`)
         .leftJoinLateral(optionsSq, sql`true`);

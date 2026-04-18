@@ -36,8 +36,10 @@ export function DataTable<TData, TValue>({
         }
     })
 
+    const pageCount = Math.max(table.getPageCount(), 1)
+
     return (
-        <div className="overflow-hidden rounded-md border max-w-4/5 w-full">
+        <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
             <Table>
                 <TableHeader>
                     {table.getHeaderGroups().map((headerGroup) => (
@@ -80,23 +82,28 @@ export function DataTable<TData, TValue>({
                     )}
                 </TableBody>
             </Table>
-            <div className="flex items-center justify-end space-x-2 py-4">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => table.previousPage()}
-                    disabled={!table.getCanPreviousPage()}
-                >
-                    Previous
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => table.nextPage()}
-                    disabled={!table.getCanNextPage()}
-                >
-                    Next
-                </Button>
+            <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                    Page {table.getState().pagination.pageIndex + 1} of {pageCount}
+                </p>
+                <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
+                    <Button
+                        variant="outline"
+                        onClick={() => table.previousPage()}
+                        disabled={!table.getCanPreviousPage()}
+                        className="min-w-24 flex-1 rounded-lg sm:flex-none"
+                    >
+                        Previous
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => table.nextPage()}
+                        disabled={!table.getCanNextPage()}
+                        className="min-w-24 flex-1 rounded-lg sm:flex-none"
+                    >
+                        Next
+                    </Button>
+                </div>
             </div>
         </div>
     )
