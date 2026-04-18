@@ -26,7 +26,7 @@ export type Question = {
         id: number;
         title: string;
         description: string;
-        slug: string
+        slug?: string;
     }[];
     options: {
         id: number;
