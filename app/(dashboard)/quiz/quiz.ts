@@ -181,12 +181,33 @@ export async function getMyQuestions (){
 }
 
 export async function createQuestion(_prevState: CreateQuestionState, formData: FormData): Promise<CreateQuestionState> {
-    const quizId = Number(formData.get("quizId"));
     const prompt = String(formData.get("prompt") ?? "").trim();
+    const body = String(formData.get("body") ?? "").trim();
     const correctOption = String(formData.get("correctOption") ?? "");
     const options = formData.getAll("options[]").map((option) => String(option).trim());
-
-    const correctIndex = Number(correctOption.split("-")[1]);
+    const parsedCorrectIndex = Number.parseInt(
+        correctOption.includes("-")
+            ? correctOption.split("-")[1] ?? ""
+            : correctOption,
+        10
+    );
+    const quizIds = [...new Set([
+        ...formData
+            .getAll("quizIds[]")
+            .map((quizId) => Number.parseInt(String(quizId), 10))
+            .filter((quizId) => Number.isInteger(quizId)),
+        ...(
+            formData.get("quizId")
+                ? [Number.parseInt(String(formData.get("quizId")), 10)]
+                : []
+        ),
+    ])];
+    const conceptIds = [...new Set(
+        formData
+            .getAll("conceptIds[]")
+            .map((conceptId) => Number.parseInt(String(conceptId), 10))
+            .filter((conceptId) => Number.isInteger(conceptId))
+    )];
 
     const { isAuthenticated,userId } = await auth();
 
@@ -194,12 +215,16 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
         return {status: "error", message: "You must be signed in to create a question."};
     }
 
-    if (!Number.isInteger(quizId)) {
-        return {status: "error", message: "Choose a quiz."};
-    }
-
     if (!prompt) {
         return {status: "error", message: "Enter a prompt."};
+    }
+
+    if (prompt.length > 255) {
+        return {status: "error", message: "Prompt must be 255 characters or fewer."};
+    }
+
+    if (body.length > 255) {
+        return {status: "error", message: "Body must be 255 characters or fewer."};
     }
 
     if (options.length === 0) {
@@ -210,35 +235,82 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
         return {status: "error", message: "Options cannot be empty."};
     }
 
-    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+    if (options.some((option) => option.length > 255)) {
+        return {status: "error", message: "Each option must be 255 characters or fewer."};
+    }
+
+    if (!Number.isInteger(parsedCorrectIndex) || parsedCorrectIndex < 0 || parsedCorrectIndex >= options.length) {
         return {status: "error", message: "Choose the correct option."};
     }
 
-    try {
-        const [question] = await database
-            .insert(questionTable)
-            .values({
-                question: prompt,
-                ownerId: userId,
-            })
-            .returning({id: questionTable.id});
+    if (quizIds.length > 0) {
+        const existingQuizzes = await database
+            .select({id: quizTable.id})
+            .from(quizTable)
+            .where(inArray(quizTable.id, quizIds));
 
-        database.insert(quizQuestion).values({
-            quizId: quizId,
-            questionId: question.id,
+        if (existingQuizzes.length !== quizIds.length) {
+            return {status: "error", message: "One or more quizzes could not be found."};
+        }
+    }
+
+    if (conceptIds.length > 0) {
+        const existingConcepts = await database
+            .select({id: conceptTable.id})
+            .from(conceptTable)
+            .where(inArray(conceptTable.id, conceptIds));
+
+        if (existingConcepts.length !== conceptIds.length) {
+            return {status: "error", message: "One or more concepts could not be found."};
+        }
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            const [question] = await tx
+                .insert(questionTable)
+                .values({
+                    question: prompt,
+                    body: body || null,
+                    ownerId: userId,
+                })
+                .returning({id: questionTable.id});
+
+            if (quizIds.length > 0) {
+                await tx.insert(quizQuestion).values(
+                    quizIds.map((quizId) => ({
+                        quizId,
+                        questionId: question.id,
+                    }))
+                );
+            }
+
+            await tx.insert(questionOptionTable).values(
+                options.map((option, idx) => ({
+                    questionId: question.id,
+                    option,
+                    isCorrect: idx === parsedCorrectIndex,
+                }))
+            );
+
+            if (conceptIds.length > 0) {
+                await tx.insert(questionConcepts).values(
+                    conceptIds.map((conceptId) => ({
+                        questionId: question.id,
+                        conceptId,
+                    }))
+                );
+            }
         });
 
-        await database.insert(questionOptionTable).values(
-            options.map((option, idx) => ({
-                questionId: question.id,
-                option,
-                isCorrect: idx === correctIndex,
-            }))
-        );
-
         revalidatePath("/quiz");
+        revalidatePath("/quiz/self");
 
-        return {status: "success", resetKey: crypto.randomUUID()};
+        return {
+            status: "success",
+            message: "Question created.",
+            resetKey: crypto.randomUUID(),
+        };
     } catch {
         return {status: "error", message: "Unable to save the question right now."};
     }
