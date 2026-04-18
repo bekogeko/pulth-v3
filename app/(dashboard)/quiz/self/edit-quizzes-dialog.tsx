@@ -2,10 +2,10 @@
 
 import {useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {Plus, Trash2} from "lucide-react";
+import {Plus, Trash2, X} from "lucide-react";
 import {toast} from "sonner";
 
-import {getQuizzesByQuestionId} from "@/app/(dashboard)/quiz/quiz";
+import {getAllQuizzes, getQuizzesByQuestionId} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {
     Dialog,
@@ -48,11 +48,17 @@ export function EditQuizzesDialog({
                                      quizzes,
                                   }: EditOptionsDialogProps) {
 
-    const queryClient = useQueryClient();
+
     const {data,isLoading} = useQuery({
         queryKey:["quizzes","questionId",questionId],
         queryFn: ()=>getQuizzesByQuestionId(questionId),
         initialData:quizzes,
+        enabled:open,
+    });
+
+    const {data:allQuizzes,isLoading:quizzesLoading} = useQuery({
+        queryKey:["quizzes"],
+        queryFn: ()=>getAllQuizzes(),
         enabled:open,
     });
 
@@ -102,7 +108,41 @@ export function EditQuizzesDialog({
                             isLoading ? (<p>Loading</p>):(<p>{data&&data.map((quiz)=>quiz.title)}</p>)
                         }
 
+                        {data.map((quiz) => {
+                            const questionCount = "questionCount" in quiz ? Number(quiz.questionCount) : null;
 
+                            return (
+                                <div
+                                    key={quiz.id}
+                                    className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-3"
+                                >
+                                    <div className="min-w-0 space-y-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="text-sm font-medium text-foreground">
+                                                {quiz.title}
+                                            </p>
+                                            {questionCount !== null ? (
+                                                <span className="rounded-full bg-background px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                                            {questionCount} question{questionCount === 1 ? "" : "s"}
+                                                        </span>
+                                            ) : null}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground">
+                                            {quiz.description}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        onClick={() => toggleQuiz(quiz.id)}
+                                        aria-label={`Remove ${quiz.title}`}
+                                    >
+                                        <X className="size-4" />
+                                    </Button>
+                                </div>
+                            );
+                        })}
 
                     </div>
                 </div>
