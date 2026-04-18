@@ -128,8 +128,8 @@ function RowActions({question}: { question: Question }) {
                     onOpenChange={setIsQuizzesDialogOpen}
                     question={question.question}
                     body={question.body}
+                    questionId={question.id}
                     quizzes={question.quizzes}
-
                 />
             ) : null}
         </>

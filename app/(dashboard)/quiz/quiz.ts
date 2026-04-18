@@ -400,3 +400,15 @@ export async function getQuestionsBySlug(slug: string){
             questionTable.question
         )
 }
+
+export async function getQuizzesByQuestionId(questionId: number){
+    return database
+        .select({
+            id: quizTable.id,
+            title: quizTable.title,
+            description: quizTable.description,
+        })
+        .from(quizQuestion)
+        .innerJoin(quizTable, eq(quizQuestion.quizId, quizTable.id))
+        .where(eq(quizQuestion.questionId, questionId));
+}

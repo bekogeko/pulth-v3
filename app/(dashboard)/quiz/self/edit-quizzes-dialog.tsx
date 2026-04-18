@@ -1,11 +1,11 @@
 "use client";
 
 import {useState} from "react";
-import {useMutation, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {Plus, Trash2} from "lucide-react";
 import {toast} from "sonner";
 
-import {updateQuestionOptions} from "@/app/(dashboard)/quiz/quiz";
+import {getQuizzesByQuestionId} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {
     Dialog,
@@ -30,12 +30,13 @@ type EditOptionsDialogProps = {
 
     question: string;
     body: string | null;
-    quizzes: {
-        id: number
-        title: string
-        description: string
+    questionId: number;
+    quizzes:{
+        id: number;
+        title: string;
+        description: string;
         slug: string
-    }[]
+    }[];
 };
 
 export function EditQuizzesDialog({
@@ -43,10 +44,17 @@ export function EditQuizzesDialog({
                                       onOpenChange,
                                       question,
                                       body,
-                                      quizzes
+                                      questionId,
+                                     quizzes,
                                   }: EditOptionsDialogProps) {
 
     const queryClient = useQueryClient();
+    const {data,isLoading} = useQuery({
+        queryKey:["quizzes","questionId",questionId],
+        queryFn: ()=>getQuizzesByQuestionId(questionId),
+        initialData:quizzes,
+        enabled:open,
+    });
 
 
 
@@ -90,6 +98,9 @@ export function EditQuizzesDialog({
                                 </p>
                             </div>
                         </div>
+                        {
+                            isLoading ? (<p>Loading</p>):(<p>{data&&data.map((quiz)=>quiz.title)}</p>)
+                        }
 
 
 
