@@ -32,6 +32,16 @@ type UpdateQuestionOptionsState = {
     message: string;
 };
 
+type UpdateQuestionQuizzesInput = {
+    questionId: number;
+    quizIds: number[];
+};
+
+type UpdateQuestionQuizzesState = {
+    status: "success" | "error";
+    message: string;
+};
+
 export async function getAllQuizzes (){
     return database
         .select({
@@ -64,62 +74,110 @@ export async function getMyQuestions (){
         return [];
     }
 
-    return database
+
+    type ConceptJson = {
+        id: number;
+        name: string;
+        description: string | null;
+    };
+
+    type QuizJson = {
+        id: number;
+        title: string;
+        description: string;
+    };
+
+    type OptionJson = {
+        id: number;
+        option: string;
+        isCorrect: boolean;
+    };
+
+    const conceptsSq = database
         .select({
-            id: questionTable.id,
-            quizId: quizQuestion.quizId,
-            question: questionTable.question,
-            body: questionTable.body,
+            concepts: sql<ConceptJson[]>`
+        coalesce(
+          json_agg(
+            json_build_object(
+              'id', ${conceptTable.id},
+              'name', ${conceptTable.name},
+              'description', ${conceptTable.description}
+            )
+            order by ${conceptTable.id}
+          ),
+          '[]'::json
+        )
+      `.as("concepts"),
+        })
+        .from(questionConcepts)
+        .innerJoin(
+            conceptTable,
+            eq(questionConcepts.conceptId, conceptTable.id)
+        )
+        .where(eq(questionConcepts.questionId, questionTable.id))
+        .as("concepts_sq");
 
-            options: sql<{ id: number; option: string; isCorrect: boolean }[]>`
-              coalesce((
-                select json_agg(
-                  json_build_object(
-                    'id', ${questionOptionTable.id},
-                    'option', ${questionOptionTable.option},
-                    'isCorrect', ${questionOptionTable.isCorrect}
-                  )
-                  order by ${questionOptionTable.id}
-                )
-                from ${questionOptionTable}
-                where ${questionOptionTable.questionId} = ${questionTable.id}
-              ), '[]'::json)`,
 
-            concepts: sql<{ id: number; name: string }[]>`
-              coalesce((
-                select json_agg(
-                  json_build_object(
-                    'id', ${conceptTable.id},
-                    'name', ${conceptTable.name}
-                  )
-                  order by ${conceptTable.id}
-                )
-                from ${questionConcepts}
-                inner join ${conceptTable}
-                  on ${conceptTable.id} = ${questionConcepts.conceptId}
-                where ${questionConcepts.questionId} = ${questionTable.id}
-              ), '[]'::json)`,
-            quizzes:sql<{ id: number; title: string; description: string; slug: string }[]>`
-              coalesce((
-                select json_agg(
-                  json_build_object(
-                    'id', ${quizTable.id},
-                    'title', ${quizTable.title},
-                    'description', ${quizTable.description},
-                    'slug', ${quizTable.slug}
-                  )
-                  order by ${quizTable.id}
-                )
-                from ${quizQuestion}
-                inner join ${quizTable}
-                  on ${quizTable.id} = ${quizQuestion.quizId}
-                where ${quizQuestion.questionId} = ${questionTable.id}
-              ), '[]'::json)
-            `,
+    const quizzesSq = database
+        .select({
+            quizzes: sql<QuizJson[]>`
+        coalesce(
+          json_agg(
+            json_build_object(
+              'id', ${quizTable.id},
+              'title', ${quizTable.title},
+              'description', ${quizTable.description}
+            )
+            order by ${quizTable.id}
+          ),
+          '[]'::json
+        )
+      `.as("quizzes"),
         })
         .from(quizQuestion)
-        .innerJoin(questionTable, eq(questionTable.id, quizQuestion.questionId))
-        .where(eq(questionTable.ownerId,userId));
+        .innerJoin(quizTable, eq(quizQuestion.quizId, quizTable.id))
+        .where(eq(quizQuestion.questionId, questionTable.id))
+        .as("quizzes_sq");
+
+
+    const optionsSq = database
+        .select({
+            options: sql<OptionJson[]>`
+        coalesce(
+          json_agg(
+            json_build_object(
+              'id', ${questionOptionTable.id},
+              'option', ${questionOptionTable.option},
+              'isCorrect', ${questionOptionTable.isCorrect}
+            )
+            order by ${questionOptionTable.id}
+          ),
+          '[]'::json
+        )
+      `.as("options"),
+        })
+        .from(questionOptionTable)
+        .where(eq(questionOptionTable.questionId, questionTable.id))
+        .as("options_sq");
+
+
+    const rows = await database
+        .select({
+            id: questionTable.id,
+            question: questionTable.question,
+            ownerId: questionTable.ownerId,
+            body: questionTable.body,
+
+            concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
+            quizzes: sql<QuizJson[]>`coalesce(${quizzesSq.quizzes}, '[]'::json)`,
+            options: sql<OptionJson[]>`coalesce(${optionsSq.options}, '[]'::json)`,
+        })
+        .from(questionTable)
+        .leftJoinLateral(conceptsSq, sql`true`)
+        .leftJoinLateral(quizzesSq, sql`true`)
+        .leftJoinLateral(optionsSq, sql`true`);
+
+    return rows;
 }
 
 export async function createQuestion(_prevState: CreateQuestionState, formData: FormData): Promise<CreateQuestionState> {
@@ -354,6 +412,90 @@ export async function updateQuestionOptions({
         return {
             status: "error",
             message: "Unable to update options right now.",
+        };
+    }
+}
+
+export async function updateQuestionQuizzes({
+    questionId,
+    quizIds,
+}: UpdateQuestionQuizzesInput): Promise<UpdateQuestionQuizzesState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            status: "error",
+            message: "You must be signed in to update quizzes.",
+        };
+    }
+
+    if (!Number.isInteger(questionId)) {
+        return {
+            status: "error",
+            message: "Question not found.",
+        };
+    }
+
+    const uniqueQuizIds = [...new Set(quizIds)]
+        .filter((quizId) => Number.isInteger(quizId));
+
+    const [ownedQuestion] = await database
+        .select({id: questionTable.id})
+        .from(questionTable)
+        .where(and(
+            eq(questionTable.id, questionId),
+            eq(questionTable.ownerId, userId),
+        ))
+        .limit(1);
+
+    if (!ownedQuestion) {
+        return {
+            status: "error",
+            message: "Question not found or you do not have access to it.",
+        };
+    }
+
+    if (uniqueQuizIds.length > 0) {
+        const existingQuizzes = await database
+            .select({id: quizTable.id})
+            .from(quizTable)
+            .where(inArray(quizTable.id, uniqueQuizIds));
+
+        if (existingQuizzes.length !== uniqueQuizIds.length) {
+            return {
+                status: "error",
+                message: "One or more quizzes could not be found.",
+            };
+        }
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .delete(quizQuestion)
+                .where(eq(quizQuestion.questionId, questionId));
+
+            if (uniqueQuizIds.length > 0) {
+                await tx.insert(quizQuestion).values(
+                    uniqueQuizIds.map((quizId) => ({
+                        questionId,
+                        quizId,
+                    }))
+                );
+            }
+        });
+
+        revalidatePath("/quiz");
+        revalidatePath("/quiz/self");
+
+        return {
+            status: "success",
+            message: "Quizzes updated.",
+        };
+    } catch {
+        return {
+            status: "error",
+            message: "Unable to update quizzes right now.",
         };
     }
 }

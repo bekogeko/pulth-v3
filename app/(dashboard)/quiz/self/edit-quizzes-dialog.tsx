@@ -1,11 +1,11 @@
 "use client";
 
 import {useState} from "react";
-import {useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {Link2, Link2Off, RotateCcw} from "lucide-react";
 import {toast} from "sonner";
 
-import {getAllQuizzes, getQuizzesByQuestionId} from "@/app/(dashboard)/quiz/quiz";
+import {getAllQuizzes, getQuizzesByQuestionId, updateQuestionQuizzes} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {
     Dialog,
@@ -60,23 +60,35 @@ export function EditQuizzesDialog({
         enabled: open,
     });
 
+    const updateQuizzesMutation = useMutation({
+        mutationFn: () => updateQuestionQuizzes({
+            questionId,
+            quizIds: selectedQuizIds,
+        }),
+        onSuccess: async (result) => {
+            if (result.status === "error") {
+                toast.error(result.message);
+                return;
+            }
+
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ["quizzes"]}),
+                queryClient.invalidateQueries({queryKey: ["quizzes", "self"]}),
+                queryClient.invalidateQueries({queryKey: ["quizzes", "questionId", questionId]}),
+                queryClient.invalidateQueries({queryKey: ["quiz"]}),
+            ]);
+
+            toast.success(result.message);
+            handleOpenChange(false);
+        },
+        onError: () => {
+            toast.error("Unable to update quizzes right now.");
+        },
+    });
+
     const initialSelectedQuizIds = quizzes.map((quiz) => quiz.id);
     const selectedQuizIdSet = new Set(selectedQuizIds);
     const initialSelectedQuizIdSet = new Set(initialSelectedQuizIds);
-    const quizLookup = new Map<number, QuizSummary>();
-
-    for (const quiz of quizzes) {
-        quizLookup.set(quiz.id, quiz);
-    }
-
-    for (const quiz of attachedQuizzes ?? []) {
-        quizLookup.set(quiz.id, quiz);
-    }
-
-    for (const quiz of allQuizzes ?? []) {
-        quizLookup.set(quiz.id, quiz);
-    }
-
     const attachedQuizRecords = (allQuizzes ?? attachedQuizzes ?? quizzes).filter((quiz) =>
         selectedQuizIdSet.has(quiz.id)
     );
@@ -124,89 +136,13 @@ export function EditQuizzesDialog({
         setSelectedQuizIds(initialSelectedQuizIds);
     }
 
-    function saveLocally() {
-        const nextAttachedQuizzes = selectedQuizIds
-            .map((quizId) => quizLookup.get(quizId))
-            .filter((quiz): quiz is QuizSummary => Boolean(quiz));
-        const nextQuestionQuizzes = nextAttachedQuizzes.map((quiz) => ({
-            id: quiz.id,
-            title: quiz.title,
-            description: quiz.description,
-            slug: quiz.slug ?? "",
-        }));
-
-        queryClient.setQueryData(["quizzes", "questionId", questionId], nextAttachedQuizzes);
-        queryClient.setQueryData(
-            ["quizzes", "self"],
-            (currentData: Array<{
-                id: number;
-                quizzes: {
-                    id: number;
-                    title: string;
-                    description: string;
-                    slug: string;
-                }[];
-            }> | undefined) => {
-                if (!currentData) {
-                    return currentData;
-                }
-
-                return currentData.map((question) =>
-                    question.id === questionId
-                        ? {
-                            ...question,
-                            quizzes: nextQuestionQuizzes,
-                        }
-                        : question
-                );
-            }
-        );
-        queryClient.setQueryData(
-            ["quizzes"],
-            (currentData: Array<{
-                id: number;
-                slug: string;
-                title: string;
-                description: string;
-                questionCount: number | string;
-            }> | undefined) => {
-                if (!currentData) {
-                    return currentData;
-                }
-
-                return currentData.map((quiz) => {
-                    if (addedQuizIds.includes(quiz.id)) {
-                        return {
-                            ...quiz,
-                            questionCount: Number(quiz.questionCount) + 1,
-                        };
-                    }
-
-                    if (removedQuizIds.includes(quiz.id)) {
-                        return {
-                            ...quiz,
-                            questionCount: Math.max(0, Number(quiz.questionCount) - 1),
-                        };
-                    }
-
-                    return quiz;
-                });
-            }
-        );
-
-        toast.success("Quiz links updated locally.", {
-            description: "These changes stay in the UI until the page reloads.",
-        });
-        handleOpenChange(false);
-    }
-
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Quizzes</DialogTitle>
                     <DialogDescription>
-                        Attach and detach quizzes locally without changing the backend yet.
+                        Attach and detach quizzes for this question.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -286,6 +222,7 @@ export function EditQuizzesDialog({
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => detachQuiz(quiz.id)}
+                                                    disabled={updateQuizzesMutation.isPending}
                                                 >
                                                     <Link2Off className="size-4" />
                                                     Detach
@@ -360,6 +297,7 @@ export function EditQuizzesDialog({
                                                     type="button"
                                                     size="sm"
                                                     onClick={() => attachQuiz(quiz.id)}
+                                                    disabled={updateQuizzesMutation.isPending}
                                                 >
                                                     <Link2 className="size-4" />
                                                     Attach
@@ -382,7 +320,7 @@ export function EditQuizzesDialog({
                         type="button"
                         variant="ghost"
                         onClick={resetDraft}
-                        disabled={!hasPendingChanges}
+                        disabled={!hasPendingChanges || updateQuizzesMutation.isPending}
                     >
                         <RotateCcw className="size-4" />
                         Reset
@@ -390,8 +328,12 @@ export function EditQuizzesDialog({
                     <DialogClose asChild>
                         <Button variant="outline">Cancel</Button>
                     </DialogClose>
-                    <Button type="button" onClick={saveLocally} disabled={!hasPendingChanges}>
-                        Save locally
+                    <Button
+                        type="button"
+                        onClick={() => updateQuizzesMutation.mutate()}
+                        disabled={!hasPendingChanges || updateQuizzesMutation.isPending}
+                    >
+                        {updateQuizzesMutation.isPending ? "Saving..." : "Save quizzes"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
