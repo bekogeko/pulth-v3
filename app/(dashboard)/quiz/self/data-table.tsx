@@ -21,6 +21,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {Input} from "@/components/ui/input"
+import {Skeleton} from "@/components/ui/skeleton"
 import {Select} from "@/components/ui/select"
 import {
     Table,
@@ -310,6 +311,65 @@ export function DataTable<TData extends { concepts: Concept[] }, TValue>({
                     >
                         Next
                     </Button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export function DataTableSkeleton({
+    columnCount = 6,
+    rowCount = 6,
+}: {
+    columnCount?: number
+    rowCount?: number
+}) {
+    return (
+        <div className="flex w-full min-w-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="border-b bg-muted/10 px-4 py-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                        <Skeleton className="h-8 w-full rounded-lg sm:w-48"/>
+                        <Skeleton className="h-8 w-full rounded-lg sm:w-40"/>
+                        <Skeleton className="h-8 w-28 rounded-lg"/>
+                    </div>
+                    <Skeleton className="h-4 w-40"/>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <Skeleton className="h-6 w-24 rounded-md"/>
+                    <Skeleton className="h-6 w-28 rounded-md"/>
+                    <Skeleton className="h-6 w-20 rounded-md"/>
+                </div>
+            </div>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        {Array.from({length: columnCount}).map((_, index) => (
+                            <TableHead key={index}>
+                                <Skeleton className="h-4 w-16"/>
+                            </TableHead>
+                        ))}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {Array.from({length: rowCount}).map((_, rowIndex) => (
+                        <TableRow key={rowIndex}>
+                            {Array.from({length: columnCount}).map((__, columnIndex) => (
+                                <TableCell key={columnIndex}>
+                                    <Skeleton
+                                        className={columnIndex === 0 ? "h-4 w-8" : "h-4 w-full max-w-[12rem]"}
+                                    />
+                                </TableCell>
+                            ))}
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+            <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <Skeleton className="h-4 w-24"/>
+                <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
+                    <Skeleton className="h-8 min-w-24 flex-1 rounded-lg sm:flex-none"/>
+                    <Skeleton className="h-8 min-w-24 flex-1 rounded-lg sm:flex-none"/>
                 </div>
             </div>
         </div>

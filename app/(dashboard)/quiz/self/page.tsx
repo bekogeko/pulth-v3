@@ -2,7 +2,7 @@
 
 import {useQuery} from "@tanstack/react-query";
 import { getMyQuestions} from "@/app/(dashboard)/quiz/quiz";
-import {DataTable} from "@/app/(dashboard)/quiz/self/data-table";
+import {DataTable, DataTableSkeleton} from "@/app/(dashboard)/quiz/self/data-table";
 import {columns} from "@/app/(dashboard)/quiz/self/columns";
 
 
@@ -22,7 +22,7 @@ export default function Quiz() {
                     </p>
                 </div>
             </div>
-            {isLoading ? <p>Loading...</p>:
+            {isLoading ? <DataTableSkeleton columnCount={columns.length} />:
                 <DataTable columns={columns} data={quizzes!}/>}
 
         </div>
