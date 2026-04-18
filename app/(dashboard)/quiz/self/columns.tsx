@@ -58,7 +58,7 @@ export const columns: ColumnDef<Question>[] = [
     {
         accessorKey: "quizzes",
         accessorFn: (question) => question.quizzes.map((quiz) => quiz.title).join(", "),
-        header: "Concepts",
+        header: "Quizzes",
     },
     {
         accessorKey: "options",
