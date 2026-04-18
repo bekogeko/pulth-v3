@@ -11,7 +11,7 @@ export default function PosthogIdentifier(){
     useEffect(()=>{
         if(isSignedIn && userId && user && !posthog._isIdentified()){
             posthog.identify(userId,{
-                email:user.primaryEmailAddress,
+                email:user.primaryEmailAddress!.emailAddress,
                 userId: userId,
             });
         }
