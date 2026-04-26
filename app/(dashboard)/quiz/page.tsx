@@ -30,14 +30,6 @@ export default function Quiz() {
 
     return (
         <div className="flex flex-col gap-6 p-6">
-            <div className="flex justify-start">
-                <Button variant={"link"}>
-                    <Link href={"/quiz/self"} className="flex items-center gap-2">
-                        My Questions
-                    </Link>
-                </Button>
-            </div>
-
             <div className="space-y-3">
                 <div className="space-y-1">
                     <h2 className="text-lg font-semibold">Quizzes</h2>
