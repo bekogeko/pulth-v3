@@ -1,14 +1,16 @@
 "use client";
 
 import {useMemo, useState} from "react";
-import {useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery} from "@tanstack/react-query";
 import {ArrowLeft, ArrowRight, Check, RotateCcw} from "lucide-react";
+import {toast} from "sonner";
 
 import {
     getConceptById,
     getQuestionsByConceptId,
     getQuestionsBySlug,
-    getQuizBySlug
+    getQuizBySlug,
+    submitUserAnswer
 } from "@/app/(dashboard)/quiz/quiz";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {Button} from "@/components/ui/button";
@@ -58,6 +60,23 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
     const currentQuestionNumber = activeQuestionIndex + 1;
     const selectedOptionId = currentQuestion ? selectedOptions[currentQuestion.questionId] : undefined;
     const isCurrentQuestionChecked = currentQuestion ? checkedQuestions[currentQuestion.questionId] : false;
+    const submitAnswerMutation = useMutation({
+        mutationFn: submitUserAnswer,
+        onSuccess: (result, variables) => {
+            if (result.status === "error") {
+                toast.error(result.message);
+                return;
+            }
+
+            setCheckedQuestions((prev) => ({
+                ...prev,
+                [variables.questionId]: true,
+            }));
+        },
+        onError: () => {
+            toast.error("Unable to record your answer right now.");
+        },
+    });
     const correctAnswerCount = useMemo(() => {
         if (!questions?.length) {
             return 0;
@@ -88,9 +107,20 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
             return;
         }
 
-        setCheckedQuestions((prev) => ({
+        submitAnswerMutation.mutate({
+            questionId: currentQuestion.questionId,
+            optionId: Number.parseInt(selectedOptionId, 10),
+        });
+    }
+
+    function selectCurrentOption(optionId: number) {
+        if (!currentQuestion || isCurrentQuestionChecked || submitAnswerMutation.isPending) {
+            return;
+        }
+
+        setSelectedOptions((prev) => ({
             ...prev,
-            [currentQuestion.questionId]: true,
+            [currentQuestion.questionId]: String(optionId),
         }));
     }
 
@@ -224,7 +254,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                         <RadioGroup
                             value={selectedOptionId}
                             onValueChange={(value) => {
-                                if (isCurrentQuestionChecked) {
+                                if (isCurrentQuestionChecked || submitAnswerMutation.isPending) {
                                     return;
                                 }
 
@@ -245,9 +275,12 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                                     <Label
                                         key={option.id}
                                         htmlFor={optionId}
+                                        aria-disabled={isCurrentQuestionChecked || submitAnswerMutation.isPending}
+                                        onClick={() => selectCurrentOption(option.id)}
                                         className={cn(
                                             "flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 bg-background px-4 py-4 transition-colors",
                                             "hover:border-primary/40 hover:bg-primary/5",
+                                            (isCurrentQuestionChecked || submitAnswerMutation.isPending) && "cursor-default",
                                             isSelected && !isCurrentQuestionChecked && "border-primary bg-primary/8 shadow-sm",
                                             isCorrectSelection && "border-green-500/60 bg-green-500/10",
                                             isWrongSelection && "border-destructive/60 bg-destructive/10"
@@ -257,7 +290,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                                             id={optionId}
                                             value={String(option.id)}
                                             className="mt-0.5"
-                                            disabled={isCurrentQuestionChecked}
+                                            disabled={isCurrentQuestionChecked || submitAnswerMutation.isPending}
                                         />
                                         <span className="flex-1 text-sm leading-6 text-foreground">
                                             {option.option}
@@ -297,10 +330,10 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                                     <Button
                                         type="button"
                                         onClick={checkCurrentQuestion}
-                                        disabled={!selectedOptionId}
+                                        disabled={!selectedOptionId || submitAnswerMutation.isPending}
                                     >
                                         <Check />
-                                        Check answer
+                                        {submitAnswerMutation.isPending ? "Saving..." : "Check answer"}
                                     </Button>
                                 ) : (
                                     <Button type="button" onClick={goToNextQuestion}>

@@ -2,13 +2,17 @@
 import {database} from "@/lib/database";
 import {
     conceptTable,
-    questionConcepts,
+    questionConceptRatingTable,
+    questionConceptsTable as questionConcepts,
     questionOptionTable,
     questionTable,
-    quizQuestion,
+    ratingEventTable,
+    quizQuestionTable as quizQuestion,
     quizTable,
-    topicConcepts,
-    topicTable
+    topicConceptsTable as topicConcepts,
+    topicTable,
+    userAnswerTable,
+    userConceptRatingTable
 } from "@/db/schema";
 import {revalidatePath} from "next/cache";
 import {auth} from "@clerk/nextjs/server";
@@ -50,6 +54,32 @@ type UpdateQuestionQuizzesState = {
     status: "success" | "error";
     message: string;
 };
+
+type SubmitAnswerInput = {
+    questionId: number;
+    optionId: number;
+};
+
+type SubmitAnswerState = {
+    status: "success" | "error";
+    message: string;
+    answerId?: number;
+    wasCorrect?: boolean;
+};
+
+const DEFAULT_CONCEPT_RATING = 1000;
+const RATING_K_FACTOR = 32;
+
+function calculateRatingChange(userRating: number, questionRating: number, wasCorrect: boolean) {
+    const expectedUserScore = 1 / (1 + 10 ** ((questionRating - userRating) / 400));
+    const userScore = wasCorrect ? 1 : 0;
+    const userDelta = RATING_K_FACTOR * (userScore - expectedUserScore);
+
+    return {
+        newUserRating: userRating + userDelta,
+        newQuestionRating: questionRating - userDelta,
+    };
+}
 
 export async function getAllQuizzes (){
     return database
@@ -623,6 +653,206 @@ export async function updateQuestionQuizzes({
         return {
             status: "error",
             message: "Unable to update quizzes right now.",
+        };
+    }
+}
+
+export async function submitUserAnswer({
+    questionId,
+    optionId,
+}: SubmitAnswerInput): Promise<SubmitAnswerState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            status: "error",
+            message: "You must be signed in to answer questions.",
+        };
+    }
+
+    if (!Number.isInteger(questionId) || !Number.isInteger(optionId)) {
+        return {
+            status: "error",
+            message: "Choose an answer before continuing.",
+        };
+    }
+
+    //
+    const [selectedOption] = await database
+        .select({
+            id: questionOptionTable.id,
+            questionId: questionOptionTable.questionId,
+            isCorrect: questionOptionTable.isCorrect,
+        })
+        .from(questionOptionTable)
+        .where(eq(questionOptionTable.id, optionId))
+        .limit(1);
+
+    if (!selectedOption) {
+        return {
+            status: "error",
+            message: "Answer option not found.",
+        };
+    }
+
+    if (selectedOption.questionId !== questionId) {
+        return {
+            status: "error",
+            message: "Answer option does not belong to this question.",
+        };
+    }
+
+    const [existingAnswer] = await database
+        .select({
+            id: userAnswerTable.id,
+            wasCorrect: userAnswerTable.wasCorrect,
+        })
+        .from(userAnswerTable)
+        .where(and(
+            eq(userAnswerTable.userId, userId),
+            eq(userAnswerTable.questionId, questionId),
+        ))
+        .limit(1);
+
+    if (existingAnswer) {
+        return {
+            status: "success",
+            message: "Answer already recorded.",
+            answerId: existingAnswer.id,
+            wasCorrect: existingAnswer.wasCorrect,
+        };
+    }
+
+    try {
+        const answer = await database.transaction(async (tx) => {
+            const [createdAnswer] = await tx
+                .insert(userAnswerTable)
+                .values({
+                    userId,
+                    questionId: selectedOption.questionId,
+                    optionId: selectedOption.id,
+                    wasCorrect: selectedOption.isCorrect,
+                })
+                .returning({
+                    id: userAnswerTable.id,
+                });
+
+            const conceptRows = await tx
+                .select({
+                    conceptId: questionConcepts.conceptId,
+                })
+                .from(questionConcepts)
+                .where(eq(questionConcepts.questionId, selectedOption.questionId));
+
+            for (const {conceptId} of conceptRows) {
+                const [existingUserRating] = await tx
+                    .select({
+                        id: userConceptRatingTable.id,
+                        rating: userConceptRatingTable.rating,
+                    })
+                    .from(userConceptRatingTable)
+                    .where(and(
+                        eq(userConceptRatingTable.userId, userId),
+                        eq(userConceptRatingTable.conceptId, conceptId),
+                    ))
+                    .for("update");
+
+                const userRatingRecord = existingUserRating ?? (
+                    await tx
+                        .insert(userConceptRatingTable)
+                        .values({
+                            userId,
+                            conceptId,
+                            rating: DEFAULT_CONCEPT_RATING,
+                        })
+                        .returning({
+                            id: userConceptRatingTable.id,
+                            rating: userConceptRatingTable.rating,
+                        })
+                )[0];
+
+                const [existingQuestionRating] = await tx
+                    .select({
+                        id: questionConceptRatingTable.id,
+                        rating: questionConceptRatingTable.rating,
+                    })
+                    .from(questionConceptRatingTable)
+                    .where(and(
+                        eq(questionConceptRatingTable.questionId, selectedOption.questionId),
+                        eq(questionConceptRatingTable.conceptId, conceptId),
+                    ))
+                    .for("update");
+
+                const questionRatingRecord = existingQuestionRating ?? (
+                    await tx
+                        .insert(questionConceptRatingTable)
+                        .values({
+                            questionId: selectedOption.questionId,
+                            conceptId,
+                            rating: DEFAULT_CONCEPT_RATING,
+                        })
+                        .returning({
+                            id: questionConceptRatingTable.id,
+                            rating: questionConceptRatingTable.rating,
+                        })
+                )[0];
+
+                if (!userRatingRecord || !questionRatingRecord) {
+                    throw new Error("Unable to load concept ratings.");
+                }
+
+                const oldRatingUser = userRatingRecord.rating;
+                const oldRatingQuestion = questionRatingRecord.rating;
+                const {newUserRating, newQuestionRating} = calculateRatingChange(
+                    oldRatingUser,
+                    oldRatingQuestion,
+                    selectedOption.isCorrect,
+                );
+
+                await tx
+                    .update(userConceptRatingTable)
+                    .set({
+                        rating: newUserRating,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(userConceptRatingTable.id, userRatingRecord.id));
+
+                await tx
+                    .update(questionConceptRatingTable)
+                    .set({
+                        rating: newQuestionRating,
+                        updatedAt: new Date(),
+                    })
+                    .where(eq(questionConceptRatingTable.id, questionRatingRecord.id));
+
+                await tx
+                    .insert(ratingEventTable)
+                    .values({
+                        userId,
+                        answerId: createdAnswer.id,
+                        conceptId,
+                        oldRatingUser,
+                        newRatingUser: newUserRating,
+                        oldRatingQuestion,
+                        newRatingQuestion: newQuestionRating,
+                    });
+            }
+
+            return createdAnswer;
+        });
+
+        return {
+            status: "success",
+            message: "Answer recorded.",
+            answerId: answer.id,
+            wasCorrect: selectedOption.isCorrect,
+        };
+    } catch (error) {
+        console.error("Unable to record user answer", error);
+
+        return {
+            status: "error",
+            message: "Unable to record your answer right now.",
         };
     }
 }

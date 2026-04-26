@@ -1,0 +1,2 @@
+ALTER TABLE "question_concept_rating" ADD CONSTRAINT "question_concept_rating_questionId_conceptId_unique" UNIQUE("questionId","conceptId");--> statement-breakpoint
+ALTER TABLE "user_concept_rating" ADD CONSTRAINT "user_concept_rating_userId_conceptId_unique" UNIQUE("userId","conceptId");

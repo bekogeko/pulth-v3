@@ -7,9 +7,9 @@ import {
     timestamp,
     uniqueIndex,
     unique,
-    foreignKey
+    foreignKey, doublePrecision
 } from "drizzle-orm/pg-core";
-import {eq, sql} from "drizzle-orm";
+import {sql} from "drizzle-orm";
 
 
 export const quizTable = pgTable("quizzes", {
@@ -27,7 +27,7 @@ export const questionTable = pgTable("questions", {
     ownerId: varchar({length:255}).notNull(),
 })
 
-export const quizQuestion = pgTable("quiz_questions", {
+export const quizQuestionTable = pgTable("quiz_questions", {
     quizId: integer().references(()=>quizTable.id,{
         onDelete: "cascade"
     }).notNull(),
@@ -58,7 +58,7 @@ export const conceptTable = pgTable("concepts", {
     description: varchar({ length: 255 }),
 })
 
-export const questionConcepts = pgTable("question_concepts", {
+export const questionConceptsTable = pgTable("question_concepts", {
     questionId: integer().references(()=>questionTable.id,{onDelete:"cascade"}).notNull(),
     conceptId: integer().references(()=>conceptTable.id,{onDelete:"cascade"}).notNull(),
 },(t)=>({
@@ -78,7 +78,7 @@ export const topicTable = pgTable("topics", {
     slug: varchar({ length: 127 }).unique().notNull(),
 });
 
-export const topicConcepts = pgTable("topic_concepts", {
+export const topicConceptsTable = pgTable("topic_concepts", {
     topicId: integer().references(()=>topicTable.id,{onDelete:"cascade"}).notNull(),
     conceptId: integer().references(()=>conceptTable.id,{onDelete:"cascade"}).notNull(),
 },(t)=>({
@@ -107,3 +107,42 @@ export const userAnswerTable = pgTable("user_answers", {
     }).onDelete("restrict")
 }));
 
+export const ratingEventTable = pgTable("rating_events", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar({ length: 255 }).notNull(),
+
+    // cause of rating
+    answerId: integer().references(()=>userAnswerTable.id),
+    // which concept rated in this event
+    conceptId: integer().references(()=>conceptTable.id),
+
+    //users concept rating
+    oldRatingUser: doublePrecision(),
+    newRatingUser: doublePrecision(),
+
+    oldRatingQuestion: doublePrecision(),
+    newRatingQuestion: doublePrecision()
+})
+
+export const userConceptRatingTable=pgTable("user_concept_rating", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar({ length: 255 }).notNull(),
+    conceptId: integer().references(()=>conceptTable.id),
+    rating: doublePrecision().default(1000).notNull(),
+
+    updatedAt: timestamp().defaultNow().notNull(),
+},(t)=>({
+    userConceptUnique: unique().on(t.userId, t.conceptId),
+}))
+
+
+export const questionConceptRatingTable=pgTable("question_concept_rating", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    questionId: integer().references(()=>questionTable.id),
+    conceptId: integer().references(()=>conceptTable.id),
+    rating: doublePrecision().default(1000).notNull(),
+
+    updatedAt: timestamp().defaultNow().notNull(),
+},(t)=>({
+    questionConceptUnique: unique().on(t.questionId, t.conceptId),
+}))
