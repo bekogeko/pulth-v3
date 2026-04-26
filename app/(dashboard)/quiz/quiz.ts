@@ -67,6 +67,14 @@ type SubmitAnswerState = {
     wasCorrect?: boolean;
 };
 
+export type QuestionConceptRating = {
+    questionId: number;
+    conceptId: number;
+    name: string;
+    userRating: number | null;
+    questionRating: number;
+};
+
 const DEFAULT_CONCEPT_RATING = 1000;
 const RATING_K_FACTOR = 32;
 
@@ -308,8 +316,8 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
         return {status: "error", message: "Prompt must be 255 characters or fewer."};
     }
 
-    if (body.length > 255) {
-        return {status: "error", message: "Body must be 255 characters or fewer."};
+    if (body.length > 1024) {
+        return {status: "error", message: "Body must be 1024 characters or fewer."};
     }
 
     if (options.length === 0) {
@@ -855,6 +863,46 @@ export async function submitUserAnswer({
             message: "Unable to record your answer right now.",
         };
     }
+}
+
+export async function getQuestionConceptRatings(questionIds: number[]): Promise<QuestionConceptRating[]> {
+    const uniqueQuestionIds = [...new Set(questionIds)]
+        .filter((questionId) => Number.isInteger(questionId));
+
+    if (uniqueQuestionIds.length === 0) {
+        return [];
+    }
+
+    const {userId} = await auth();
+
+    return database
+        .select({
+            questionId: questionConcepts.questionId,
+            conceptId: conceptTable.id,
+            name: conceptTable.name,
+            userRating: userId
+                ? sql<number>`coalesce(${userConceptRatingTable.rating}, ${DEFAULT_CONCEPT_RATING})`
+                : sql<null>`null`,
+            questionRating: sql<number>`coalesce(${questionConceptRatingTable.rating}, ${DEFAULT_CONCEPT_RATING})`,
+        })
+        .from(questionConcepts)
+        .innerJoin(conceptTable, eq(questionConcepts.conceptId, conceptTable.id))
+        .leftJoin(
+            questionConceptRatingTable,
+            and(
+                eq(questionConceptRatingTable.questionId, questionConcepts.questionId),
+                eq(questionConceptRatingTable.conceptId, questionConcepts.conceptId),
+            )
+        )
+        .leftJoin(
+            userConceptRatingTable,
+            and(
+                eq(userConceptRatingTable.conceptId, questionConcepts.conceptId),
+                eq(userConceptRatingTable.userId, userId ?? ""),
+            )
+        )
+        .where(inArray(questionConcepts.questionId, uniqueQuestionIds))
+        .orderBy(asc(questionConcepts.questionId), asc(conceptTable.name));
 }
 
 export async function getQuizBySlug(slug: string){

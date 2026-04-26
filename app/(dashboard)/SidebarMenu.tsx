@@ -1,30 +1,17 @@
 "use client"
 import {
     SidebarGroup, SidebarGroupContent,
-    SidebarGroupLabel, SidebarInset,
+    SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-    useSidebar
 } from "@/components/ui/sidebar";
-import {
-    DropdownMenu,
-    DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import {BadgeCheck, Bell, ChevronRight, ChevronsUpDown, CreditCard, LogOut, Sparkles} from "lucide-react";
-import {UserAvatar,useClerk,useUser} from "@clerk/nextjs";
+import {ChevronRight} from "lucide-react";
 import {Collapsible, CollapsibleContent, CollapsibleTrigger} from "@/components/ui/collapsible";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 
-export function CollapsibleMenu(props: {}) {
-    const { isMobile } = useSidebar();
-    const {isSignedIn,user} = useUser();
-
-    const {openUserProfile,signOut} = useClerk();
+export function CollapsibleMenu() {
     const pathname = usePathname()
     return (
         <>
@@ -58,6 +45,43 @@ export function CollapsibleMenu(props: {}) {
                                         {/*<a href={item.url}>{item.title}</a>*/}
                                         <Link href={"/quiz/self"}>
                                             My Quizzes
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+
+
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </CollapsibleContent>
+                </SidebarGroup>
+            </Collapsible>
+            <Collapsible>
+                <SidebarGroup>
+                    <SidebarGroupLabel
+                        asChild
+                        className="group/label text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    >
+                        <CollapsibleTrigger>
+                            Rankings
+                            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                        </CollapsibleTrigger>
+                    </SidebarGroupLabel>
+                    <CollapsibleContent>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === "/ranking"}>
+                                        {/*<a href={item.url}>{item.title}</a>*/}
+                                        <Link href={"/ranking"}>
+                                            Ranks
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={pathname === "/ranking/self"}>
+                                        {/*<a href={item.url}>{item.title}</a>*/}
+                                        <Link href={"/ranking/self"}>
+                                            My Ranks
                                         </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>

@@ -1,17 +1,19 @@
 "use client";
 
 import {useMemo, useState} from "react";
-import {useMutation, useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {ArrowLeft, ArrowRight, Check, RotateCcw} from "lucide-react";
 import {toast} from "sonner";
 
 import {
     getConceptById,
+    getQuestionConceptRatings,
     getQuestionsByConceptId,
     getQuestionsBySlug,
     getQuizBySlug,
     submitUserAnswer
 } from "@/app/(dashboard)/quiz/quiz";
+import type {QuestionConceptRating} from "@/app/(dashboard)/quiz/quiz";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
@@ -33,6 +35,7 @@ type SolverSource = {
 };
 
 export function QuizSolver({slug, conceptId}: QuizSolverProps) {
+    const queryClient = useQueryClient();
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
     const [checkedQuestions, setCheckedQuestions] = useState<Record<number, boolean>>({});
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -52,6 +55,16 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
         enabled: isConceptMode || Boolean(slug),
     });
 
+    const questionIds = useMemo(
+        () => questions?.map((question) => question.questionId) ?? [],
+        [questions]
+    );
+    const {data: conceptRatings} = useQuery<QuestionConceptRating[]>({
+        queryKey: ["question-concept-ratings", questionIds],
+        queryFn: () => getQuestionConceptRatings(questionIds),
+        enabled: questionIds.length > 0,
+    });
+
     const source = sourceData?.[0];
     const title = source?.title ?? source?.name;
     const lastQuestionIndex = Math.max((questions?.length ?? 1) - 1, 0);
@@ -60,9 +73,17 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
     const currentQuestionNumber = activeQuestionIndex + 1;
     const selectedOptionId = currentQuestion ? selectedOptions[currentQuestion.questionId] : undefined;
     const isCurrentQuestionChecked = currentQuestion ? checkedQuestions[currentQuestion.questionId] : false;
+    const currentConceptRatings = useMemo(() => {
+        if (!currentQuestion) {
+            return [];
+        }
+
+        return (conceptRatings ?? [])
+            .filter((rating) => rating.questionId === currentQuestion.questionId);
+    }, [conceptRatings, currentQuestion]);
     const submitAnswerMutation = useMutation({
         mutationFn: submitUserAnswer,
-        onSuccess: (result, variables) => {
+        onSuccess: async (result, variables) => {
             if (result.status === "error") {
                 toast.error(result.message);
                 return;
@@ -72,6 +93,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                 ...prev,
                 [variables.questionId]: true,
             }));
+            await queryClient.invalidateQueries({queryKey: ["question-concept-ratings"]});
         },
         onError: () => {
             toast.error("Unable to record your answer right now.");
@@ -251,8 +273,26 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <QuestionBodyBlock body={currentQuestion.body} />
+                        {currentConceptRatings.length ? (
+                            <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 sm:grid-cols-2">
+                                {currentConceptRatings.map((rating) => (
+                                    <div
+                                        key={`${rating.questionId}-${rating.conceptId}`}
+                                        className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm"
+                                    >
+                                        <span className="min-w-0 truncate font-medium text-foreground">
+                                            {rating.name}
+                                        </span>
+                                        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                                            <span>User {rating.userRating === null ? "-" : Math.round(rating.userRating)}</span>
+                                            <span>Question {Math.round(rating.questionRating)}</span>
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
                         <RadioGroup
-                            value={selectedOptionId}
+                            value={selectedOptionId ?? ""}
                             onValueChange={(value) => {
                                 if (isCurrentQuestionChecked || submitAnswerMutation.isPending) {
                                     return;

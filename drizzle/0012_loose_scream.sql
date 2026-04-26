@@ -1,0 +1,1 @@
+ALTER TABLE "questions" ALTER COLUMN "body" SET DATA TYPE varchar(1024);

@@ -20,9 +20,7 @@ export function AppSidebar() {
             </SidebarHeader>
             <SidebarContent>
                 {/*<NavMain items={data.navMain} />*/}
-                <CollapsibleMenu>
-
-                </CollapsibleMenu>
+                <CollapsibleMenu/>
                 {/*<NavProjects projects={data.projects} />*/}
             </SidebarContent>
             <SidebarFooter>

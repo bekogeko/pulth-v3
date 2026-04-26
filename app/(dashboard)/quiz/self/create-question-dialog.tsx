@@ -183,11 +183,11 @@ export function CreateQuestionDialog({
                                         id="question-body"
                                         name="body"
                                         placeholder="Optional supporting context, snippet, or note."
-                                        maxLength={255}
+                                        maxLength={1024}
                                         rows={6}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Optional. Keep it concise because question body storage is limited.
+                                        Optional. Up to 1024 characters.
                                     </p>
                                 </div>
                             </section>
