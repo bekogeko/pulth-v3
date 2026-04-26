@@ -1,4 +1,15 @@
-import {boolean, integer, pgTable, varchar, primaryKey, timestamp} from "drizzle-orm/pg-core";
+import {
+    boolean,
+    integer,
+    pgTable,
+    varchar,
+    primaryKey,
+    timestamp,
+    uniqueIndex,
+    unique,
+    foreignKey
+} from "drizzle-orm/pg-core";
+import {eq, sql} from "drizzle-orm";
 
 
 export const quizTable = pgTable("quizzes", {
@@ -34,7 +45,12 @@ export const questionOptionTable = pgTable("question_options", {
         onDelete: "cascade"
     }).notNull(),
     isCorrect: boolean().notNull().default(false),
-})
+},(t)=>({
+    oneCorrectOptionPerQuestion: uniqueIndex("one_correct_option_per_question_idx")
+        .on(t.questionId)
+        .where(sql`${t.isCorrect} = true`),
+    questionOptionUnique: unique().on(t.questionId, t.id),
+}))
 
 export const conceptTable = pgTable("concepts", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -69,11 +85,25 @@ export const topicConcepts = pgTable("topic_concepts", {
     pk: primaryKey({columns:[t.topicId,t.conceptId]})
 }))
 
+
+/// Snapshot of user answer. immutable
 export const userAnswerTable = pgTable("user_answers", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     userId: varchar({ length: 255 }).notNull(),
 
-    optionId: integer().references(()=>questionOptionTable.id,{onDelete:"cascade"}).notNull(),
+    questionId: integer().notNull(),
+    optionId: integer().notNull(),
+
+    wasCorrect: boolean().notNull(),
 
     createdAt: timestamp().defaultNow().notNull(),
-});
+},(t)=>({
+    optionBelongsToQuestionFk: foreignKey({
+        columns: [t.questionId, t.optionId],
+        foreignColumns: [
+            questionOptionTable.questionId,
+            questionOptionTable.id,
+        ],
+    }).onDelete("restrict")
+}));
+

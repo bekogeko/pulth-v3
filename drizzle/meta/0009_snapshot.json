@@ -1,5 +1,5 @@
 {
-  "id": "35f94fa9-6418-4f26-8ee2-d8d9e56bffcd",
+  "id": "05849493-0263-4e11-bee4-6455c8c3eaa9",
   "prevId": "6ac9506a-3a21-4843-bca3-578528656d8e",
   "version": "7",
   "dialect": "postgresql",
@@ -147,7 +147,24 @@
           "default": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "one_correct_option_per_question_idx": {
+          "name": "one_correct_option_per_question_idx",
+          "columns": [
+            {
+              "expression": "questionId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"question_options\".\"isCorrect\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "question_options_questionId_questions_id_fk": {
           "name": "question_options_questionId_questions_id_fk",
@@ -164,7 +181,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "question_options_questionId_id_unique": {
+          "name": "question_options_questionId_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "questionId",
+            "id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -538,9 +564,21 @@
           "primaryKey": false,
           "notNull": true
         },
+        "questionId": {
+          "name": "questionId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "optionId": {
           "name": "optionId",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wasCorrect": {
+          "name": "wasCorrect",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
@@ -554,17 +592,19 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "user_answers_optionId_question_options_id_fk": {
-          "name": "user_answers_optionId_question_options_id_fk",
+        "user_answers_questionId_optionId_question_options_questionId_id_fk": {
+          "name": "user_answers_questionId_optionId_question_options_questionId_id_fk",
           "tableFrom": "user_answers",
           "tableTo": "question_options",
           "columnsFrom": [
+            "questionId",
             "optionId"
           ],
           "columnsTo": [
+            "questionId",
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "restrict",
           "onUpdate": "no action"
         }
       },

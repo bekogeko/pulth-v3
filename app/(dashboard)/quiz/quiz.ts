@@ -1,6 +1,15 @@
 "use server"
 import {database} from "@/lib/database";
-import {conceptTable, questionConcepts, questionOptionTable, questionTable, quizQuestion, quizTable} from "@/db/schema";
+import {
+    conceptTable,
+    questionConcepts,
+    questionOptionTable,
+    questionTable,
+    quizQuestion,
+    quizTable,
+    topicConcepts,
+    topicTable
+} from "@/db/schema";
 import {revalidatePath} from "next/cache";
 import {auth} from "@clerk/nextjs/server";
 import {and, asc, count, eq, inArray, sql} from "drizzle-orm";
@@ -64,6 +73,52 @@ export async function getAllConcepts() {
         })
         .from(conceptTable)
         .orderBy(asc(conceptTable.name));
+}
+
+export async function getAllTopicsWithConcepts() {
+    type ConceptJson = {
+        id: number;
+        name: string;
+        description: string | null;
+        questionCount: number;
+    };
+
+    const conceptQuestionCountsSq = database
+        .select({
+            conceptId: questionConcepts.conceptId,
+            questionCount: count(questionConcepts.questionId).as("question_count"),
+        })
+        .from(questionConcepts)
+        .groupBy(questionConcepts.conceptId)
+        .as("concept_question_counts_sq");
+
+    return database
+        .select({
+            id: topicTable.id,
+            slug: topicTable.slug,
+            title: topicTable.title,
+            description: topicTable.description,
+            concepts: sql<ConceptJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${conceptTable.id},
+                            'name', ${conceptTable.name},
+                            'description', ${conceptTable.description},
+                            'questionCount', coalesce(${conceptQuestionCountsSq.questionCount}, 0)
+                        )
+                        order by ${conceptTable.name}
+                    ) FILTER (WHERE ${conceptTable.id} IS NOT NULL),
+                    '[]'::json
+                )
+            `,
+        })
+        .from(topicTable)
+        .leftJoin(topicConcepts, eq(topicTable.id, topicConcepts.topicId))
+        .leftJoin(conceptTable, eq(topicConcepts.conceptId, conceptTable.id))
+        .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
+        .groupBy(topicTable.id)
+        .orderBy(asc(topicTable.title));
 }
 
 export async function getMyQuestions (){
@@ -579,6 +634,17 @@ export async function getQuizBySlug(slug: string){
         .where(eq(quizTable.slug, slug))
 }
 
+export async function getConceptById(conceptId: number) {
+    if (!Number.isInteger(conceptId)) {
+        return [];
+    }
+
+    return database
+        .select()
+        .from(conceptTable)
+        .where(eq(conceptTable.id, conceptId));
+}
+
 export async function getQuestionsBySlug(slug: string){
     const quiz = await database
         .select({id: quizTable.id})
@@ -612,6 +678,50 @@ export async function getQuestionsBySlug(slug: string){
             quizQuestion.questionId,
             questionTable.id,
             questionTable.question
+        )
+}
+
+export async function getQuestionsByConceptId(conceptId: number){
+    if (!Number.isInteger(conceptId)) {
+        throw new Error("Concept not found");
+    }
+
+    const concept = await database
+        .select({id: conceptTable.id})
+        .from(conceptTable)
+        .where(eq(conceptTable.id, conceptId))
+        .limit(1)
+        .then((results) => results[0]);
+
+    if (!concept) {
+        throw new Error("Concept not found");
+    }
+
+    return database.select({
+        questionId: questionTable.id,
+        question: questionTable.question,
+        body: questionTable.body,
+        options: sql<{id:number,option:string,isCorrect:boolean}[]>`
+            coalesce(
+                json_agg(
+                    json_build_object(
+                        'id', ${questionOptionTable.id},
+                        'option', ${questionOptionTable.option},
+                        'isCorrect', ${questionOptionTable.isCorrect}
+                    )
+                    order by ${questionOptionTable.id}
+                ) FILTER (WHERE ${questionOptionTable.id} IS NOT NULL),
+                '[]'::json
+            )
+        `,
+    }).from(questionConcepts)
+        .innerJoin(questionTable, eq(questionTable.id, questionConcepts.questionId))
+        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
+        .where(eq(questionConcepts.conceptId, concept.id))
+        .groupBy(
+            questionTable.id,
+            questionTable.question,
+            questionTable.body
         )
 }
 

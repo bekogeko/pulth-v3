@@ -2,9 +2,10 @@
 
 import {useActionState, useEffect, useState} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
-import {createQuestion, getAllQuizzes} from "@/app/(dashboard)/quiz/quiz";
+import {createQuestion, getAllQuizzes, getAllTopicsWithConcepts} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {QuizList} from "@/app/(dashboard)/quiz/QuizList";
+import {TopicList} from "@/app/(dashboard)/quiz/TopicList";
 import {Input} from "@/components/ui/input";
 import {Select} from "@/components/ui/select";
 import {Label} from "@/components/ui/label";
@@ -21,6 +22,10 @@ export default function Quiz() {
     const {data: quizzes, isLoading} = useQuery({
         queryKey: ["quizzes"],
         queryFn: getAllQuizzes,
+    });
+    const {data: topics, isLoading: topicsLoading} = useQuery({
+        queryKey: ["topics", "concepts"],
+        queryFn: getAllTopicsWithConcepts,
     });
 
     return (
@@ -41,6 +46,16 @@ export default function Quiz() {
                     </p>
                 </div>
                 <QuizList quizzes={quizzes} isLoading={isLoading} />
+            </div>
+
+            <div className="space-y-3">
+                <div className="space-y-1">
+                    <h2 className="text-lg font-semibold">Topics</h2>
+                    <p className="text-sm text-muted-foreground">
+                        Browse topics and solve questions for one concept at a time.
+                    </p>
+                </div>
+                <TopicList topics={topics} isLoading={topicsLoading} />
             </div>
         </div>
     );

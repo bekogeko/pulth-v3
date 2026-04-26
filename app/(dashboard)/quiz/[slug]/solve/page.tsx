@@ -23,7 +23,7 @@ export default async function SolveQuizPage({params}: {
     return (
         <HydrationBoundary state={dehydrate(queryClient)}>
             <div className="px-4 py-6 md:px-6">
-                <QuizSolver slug={slug}/>
+                <QuizSolver key={slug} slug={slug}/>
             </div>
         </HydrationBoundary>
     );
