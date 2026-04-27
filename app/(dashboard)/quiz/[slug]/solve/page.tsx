@@ -2,6 +2,23 @@
 import {getQuestionsBySlug, getQuizBySlug} from "@/app/(dashboard)/quiz/quiz";
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
 import {QuizSolver} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolver";
+import {Metadata} from "next";
+
+
+
+export async function generateMetadata(
+    { params }: {params:Promise<{ slug: string }>}): Promise<Metadata> {
+    // read route params
+    const { slug } = await params
+
+    // fetch data
+    const quizSlug = await getQuizBySlug(slug);
+
+    return {
+        title: quizSlug[0].title,
+        description: quizSlug[0].description,
+    }
+}
 
 export default async function SolveQuizPage({params}: {
     params: Promise<{ slug: string }>
