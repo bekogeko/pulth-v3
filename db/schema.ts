@@ -55,6 +55,7 @@ export const questionOptionTable = pgTable("question_options", {
 export const conceptTable = pgTable("concepts", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 255 }).unique().notNull(),
     description: varchar({ length: 255 }),
 })
 
