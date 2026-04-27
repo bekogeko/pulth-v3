@@ -53,14 +53,12 @@ export default function Home() {
 
         <div className="flex items-center gap-2">
           <Show when="signed-out">
-            <SignInButton>
-              <Button variant="ghost" size="lg">
-                Sign in
-              </Button>
-            </SignInButton>
-            <SignUpButton>
-              <Button size="lg">Sign up</Button>
-            </SignUpButton>
+            <Button asChild variant="ghost" size="lg">
+              <SignInButton>Sign in</SignInButton>
+            </Button>
+            <Button asChild size="lg">
+              <SignUpButton>Sign up</SignUpButton>
+            </Button>
           </Show>
           <Show when="signed-in">
             <Button asChild variant="ghost" size="lg">
@@ -95,17 +93,12 @@ export default function Home() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Show when="signed-out">
-              <SignUpButton>
-                <Button size="lg" className="h-10 px-4 text-sm">
-                  Start practicing
-                  <ArrowRight />
-                </Button>
-              </SignUpButton>
-              <SignInButton>
-                <Button variant="outline" size="lg" className="h-10 px-4 text-sm">
-                  Sign in
-                </Button>
-              </SignInButton>
+              <Button asChild size="lg" className="h-10 px-4 text-sm">
+                <SignUpButton>Start practicing</SignUpButton>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="h-10 px-4 text-sm">
+                <SignInButton>Sign in</SignInButton>
+              </Button>
             </Show>
             <Show when="signed-in">
               <Button asChild size="lg" className="h-10 px-4 text-sm">
@@ -218,6 +211,15 @@ export default function Home() {
           })}
         </div>
       </section>
+
+      <footer className="border-t border-border bg-background">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <p>© 2026 Pulth</p>
+          <Link href="/privacy" className="font-medium transition-colors hover:text-foreground">
+            Privacy Policy
+          </Link>
+        </div>
+      </footer>
     </main>
   );
 }
