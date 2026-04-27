@@ -1,6 +1,6 @@
 "use client";
 
-import {useMemo, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {ArrowLeft, ArrowRight, Check, RotateCcw} from "lucide-react";
 import {toast} from "sonner";
@@ -34,12 +34,22 @@ type SolverSource = {
     description: string | null;
 };
 
+function slugifyQuestion(value: string) {
+    return value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "question";
+}
+
 export function QuizSolver({slug, conceptId}: QuizSolverProps) {
     const queryClient = useQueryClient();
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
     const [checkedQuestions, setCheckedQuestions] = useState<Record<number, boolean>>({});
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [isComplete, setIsComplete] = useState(false);
+    const [hasProcessedInitialHash, setHasProcessedInitialHash] = useState(false);
     const isConceptMode = typeof conceptId === "number";
     const sourceLabel = isConceptMode ? "Concept" : "Quiz";
 
@@ -123,6 +133,54 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
 
         return questions.filter((question) => checkedQuestions[question.questionId]).length;
     }, [checkedQuestions, questions]);
+    const currentQuestionHash = currentQuestion && !isComplete ? slugifyQuestion(currentQuestion.question) : "";
+
+    useEffect(() => {
+        if (!questions?.length) {
+            return;
+        }
+
+        function selectQuestionFromHash() {
+            const questionHash = decodeURIComponent(window.location.hash.slice(1));
+
+            if (!questionHash) {
+                return;
+            }
+
+            const hashQuestionIndex = questions!.findIndex(
+                (question) => slugifyQuestion(question.question) === questionHash
+            );
+
+            if (hashQuestionIndex === -1) {
+                return;
+            }
+
+            setIsComplete(false);
+            setCurrentQuestionIndex(hashQuestionIndex);
+        }
+
+        queueMicrotask(() => {
+            selectQuestionFromHash();
+            setHasProcessedInitialHash(true);
+        });
+        window.addEventListener("hashchange", selectQuestionFromHash);
+
+        return () => {
+            window.removeEventListener("hashchange", selectQuestionFromHash);
+        };
+    }, [questions]);
+
+    useEffect(() => {
+        if (!hasProcessedInitialHash || !currentQuestionHash) {
+            return;
+        }
+
+        const nextUrl = `${window.location.pathname}${window.location.search}#${currentQuestionHash}`;
+
+        if (window.location.hash !== `#${currentQuestionHash}`) {
+            window.history.replaceState(null, "", nextUrl);
+        }
+    }, [currentQuestionHash, hasProcessedInitialHash]);
 
     function checkCurrentQuestion() {
         if (!currentQuestion || !selectedOptionId) {
