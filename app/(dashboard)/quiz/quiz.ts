@@ -108,6 +108,7 @@ export async function getAllConcepts() {
         .select({
             id: conceptTable.id,
             name: conceptTable.name,
+            slug: conceptTable.slug,
         })
         .from(conceptTable)
         .orderBy(asc(conceptTable.name));
@@ -116,6 +117,7 @@ export async function getAllConcepts() {
 export async function getAllTopicsWithConcepts() {
     type ConceptJson = {
         id: number;
+        slug: string;
         name: string;
         description: string | null;
         questionCount: number;
@@ -141,6 +143,7 @@ export async function getAllTopicsWithConcepts() {
                     json_agg(
                         json_build_object(
                             'id', ${conceptTable.id},
+                            'slug', ${conceptTable.slug},
                             'name', ${conceptTable.name},
                             'description', ${conceptTable.description},
                             'questionCount', coalesce(${conceptQuestionCountsSq.questionCount}, 0)
@@ -921,6 +924,21 @@ export async function getConceptById(conceptId: number) {
         .select()
         .from(conceptTable)
         .where(eq(conceptTable.id, conceptId));
+}
+
+export async function getConceptBySlug(slug: string) {
+    return database
+        .select()
+        .from(conceptTable)
+        .where(eq(conceptTable.slug, slug));
+}
+
+export async function getConceptByIdentifier(identifier: string) {
+    if (/^\d+$/.test(identifier)) {
+        return getConceptById(Number.parseInt(identifier, 10));
+    }
+
+    return getConceptBySlug(identifier);
 }
 
 export async function getQuestionsBySlug(slug: string){

@@ -1,19 +1,30 @@
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
+import {notFound, permanentRedirect} from "next/navigation";
 
 import {QuizSolver} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolver";
-import {getConceptById, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
+import {getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 
 export default async function SolveConceptPage({params}: {
     params: Promise<{ conceptId: string }>
 }) {
     const {conceptId: conceptIdParam} = await params;
-    const conceptId = Number.parseInt(conceptIdParam, 10);
+    const concept = await getConceptByIdentifier(conceptIdParam).then((results) => results[0]);
+
+    if (!concept) {
+        notFound();
+    }
+
+    if (conceptIdParam !== concept.slug) {
+        permanentRedirect(`/quiz/concepts/${concept.slug}/solve`);
+    }
+
+    const conceptId = concept.id;
     const queryClient = new QueryClient();
 
     await Promise.allSettled([
         queryClient.prefetchQuery({
             queryKey: ["concept", conceptId],
-            queryFn: () => getConceptById(conceptId),
+            queryFn: () => [concept],
         }),
         queryClient.prefetchQuery({
             queryKey: ["concept", conceptId, "questions"],

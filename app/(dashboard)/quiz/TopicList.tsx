@@ -134,7 +134,7 @@ export function TopicList({topics, isLoading}: TopicListProps) {
                                     </div>
                                     {questionCount > 0 ? (
                                         <Button asChild size="sm" className="shrink-0">
-                                            <Link href={`/quiz/concepts/${concept.id}/solve`} prefetch={false}>
+                                            <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
                                                 <Sparkles />
                                                 Solve
                                             </Link>
