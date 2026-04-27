@@ -1,135 +1,67 @@
 "use client"
 import {
-    SidebarGroup, SidebarGroupContent,
+    SidebarGroup,
+    SidebarGroupContent,
     SidebarGroupLabel,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {ChevronRight} from "lucide-react";
-import {Collapsible, CollapsibleContent, CollapsibleTrigger} from "@/components/ui/collapsible";
+import {BookOpen, ClipboardList, Trophy} from "lucide-react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 
+const sidebarLinks = [
+    {
+        title: "Quizzes",
+        href: "/quiz",
+        icon: ClipboardList,
+        isActive: (pathname: string) => pathname === "/quiz" || pathname.startsWith("/quiz/"),
+    },
+    {
+        title: "Ranks",
+        href: "/ranking",
+        icon: Trophy,
+        isActive: (pathname: string) => pathname === "/ranking" || pathname.startsWith("/ranking/"),
+    },
+    {
+        title: "Article",
+        href: "/articles",
+        icon: BookOpen,
+        isActive: (pathname: string) => pathname === "/articles" || pathname.startsWith("/articles/"),
+    },
+];
+
 export function CollapsibleMenu() {
     const pathname = usePathname()
+
     return (
-        <>
-            <Collapsible
-                title={"Quizzes"}
-                className="group/collapsible"
-            >
-                <SidebarGroup>
-                    <SidebarGroupLabel
-                        asChild
-                        className="group/label text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    >
-                        <CollapsibleTrigger>
-                            Quizzes
-                            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                        </CollapsibleTrigger>
-                    </SidebarGroupLabel>
-                    <CollapsibleContent>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/quiz"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/quiz"}>
-                                            Quizzes
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/quiz/self"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/quiz/self"}>
-                                            My Quizzes
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
+        <SidebarGroup>
+            <SidebarGroupLabel className="px-3 text-xs font-medium uppercase tracking-wide text-sidebar-foreground/60">
+                Categories
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+                <SidebarMenu className="gap-1 px-2">
+                    {sidebarLinks.map((item) => {
+                        const Icon = item.icon;
 
-
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </CollapsibleContent>
-                </SidebarGroup>
-            </Collapsible>
-            <Collapsible>
-                <SidebarGroup>
-                    <SidebarGroupLabel
-                        asChild
-                        className="group/label text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    >
-                        <CollapsibleTrigger>
-                            Rankings
-                            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                        </CollapsibleTrigger>
-                    </SidebarGroupLabel>
-                    <CollapsibleContent>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/ranking"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/ranking"}>
-                                            Ranks
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/ranking/self"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/ranking/self"}>
-                                            My Ranks
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-
-
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </CollapsibleContent>
-                </SidebarGroup>
-            </Collapsible>
-            <Collapsible>
-                <SidebarGroup>
-                    <SidebarGroupLabel
-                        asChild
-                        className="group/label text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    >
-                        <CollapsibleTrigger>
-                            Articles
-                            <ChevronRight className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                        </CollapsibleTrigger>
-                    </SidebarGroupLabel>
-                    <CollapsibleContent>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/articles"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/articles"}>
-                                            Articles
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                                <SidebarMenuItem>
-                                    <SidebarMenuButton asChild isActive={pathname === "/articles/self"}>
-                                        {/*<a href={item.url}>{item.title}</a>*/}
-                                        <Link href={"/articles/self"}>
-                                            My Articles
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-
-
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </CollapsibleContent>
-                </SidebarGroup>
-            </Collapsible>
-        </>
-
+                        return (
+                            <SidebarMenuItem key={item.href}>
+                                <SidebarMenuButton
+                                    asChild
+                                    isActive={item.isActive(pathname)}
+                                    className="h-10 rounded-lg px-3 text-sm font-medium data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground"
+                                >
+                                    <Link href={item.href}>
+                                        <Icon className="size-4" />
+                                        <span>{item.title}</span>
+                                    </Link>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+                        );
+                    })}
+                </SidebarMenu>
+            </SidebarGroupContent>
+        </SidebarGroup>
     )
 }

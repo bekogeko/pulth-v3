@@ -7,8 +7,9 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import {BadgeCheck, Bell, ChevronsUpDown, CreditCard, LogOut, Sparkles} from "lucide-react";
+import {BadgeCheck, Bell, ChevronsUpDown, ClipboardList, CreditCard, LogOut, Sparkles, Trophy} from "lucide-react";
 import {UserAvatar,useClerk,useUser} from "@clerk/nextjs";
+import Link from "next/link";
 
 export function NavUser() {
     const { isMobile } = useSidebar();
@@ -53,6 +54,21 @@ export function NavUser() {
                             <DropdownMenuItem>
                                 <Sparkles />
                                 Upgrade to Pro
+                            </DropdownMenuItem>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                            <DropdownMenuItem asChild>
+                                <Link href="/quiz/self">
+                                    <ClipboardList />
+                                    My Quizzes
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/ranking/self">
+                                    <Trophy />
+                                    My Ranks
+                                </Link>
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />

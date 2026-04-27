@@ -2,14 +2,10 @@ import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
-    SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-    SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-    SidebarRail
+    SidebarHeader,
+    SidebarRail,
 } from "@/components/ui/sidebar";
 import {NavUser} from "@/app/(dashboard)/NavUser";
-import {Collapsible, CollapsibleContent, CollapsibleTrigger} from "@/components/ui/collapsible";
-import Link from "next/link";
-import {ChevronRight} from "lucide-react";
 import {CollapsibleMenu} from "@/app/(dashboard)/SidebarMenu";
 
 export function AppSidebar() {
@@ -30,4 +26,3 @@ export function AppSidebar() {
         </Sidebar>
     )
 }
-
