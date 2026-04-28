@@ -29,7 +29,9 @@ export const articleTable = pgTable("articles", {
     // Used only while migrating/importing old MongoDB documents.
     legacyMongoId: varchar("legacy_mongo_id", { length: 24 }).unique(),
 
+    // legacy mongoDB Id
     authorId: varchar("author_id", { length: 255 }).notNull(),
+
     title: varchar({ length: 255 }).notNull(),
     description: text().notNull(),
     slug: varchar({ length: 255 }).unique().notNull(),

@@ -1,6 +1,6 @@
 import type {ReactNode} from "react";
-import InlineRenderer from "@/app/articles/[slug]/InlineRenderer";
-import ListRenderer from "@/app/articles/[slug]/ListRenderer";
+import InlineRenderer from "@/app/(dashboard)/articles/[slug]/InlineRenderer";
+import ListRenderer from "@/app/(dashboard)/articles/[slug]/ListRenderer";
 import type {Block, EditorJsOutput, EditorListItem} from "@/schemas/EditorTypes";
 
 function Header(props: { level: number; children: ReactNode }) {

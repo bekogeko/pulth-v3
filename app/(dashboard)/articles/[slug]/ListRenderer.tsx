@@ -1,4 +1,4 @@
-import InlineRenderer from "@/app/articles/[slug]/InlineRenderer";
+import InlineRenderer from "@/app/(dashboard)/articles/[slug]/InlineRenderer";
 import type {EditorListItem} from "@/schemas/EditorTypes";
 
 function getItemText(item: EditorListItem) {

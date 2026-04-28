@@ -2,7 +2,7 @@ import type {Metadata} from "next";
 import {notFound} from "next/navigation";
 
 import {getArticleBySlug} from "@/app/actions/article";
-import ArticleRenderer from "@/app/articles/[slug]/ArticleRenderer";
+import ArticleRenderer from "@/app/(dashboard)/articles/[slug]/ArticleRenderer";
 import {getAbsoluteUrl} from "@/lib/site-url";
 
 type ArticlePageProps = {
