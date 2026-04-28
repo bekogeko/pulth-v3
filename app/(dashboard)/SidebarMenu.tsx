@@ -7,7 +7,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {BookOpen, ClipboardList, Trophy} from "lucide-react";
+import {BookOpen, CircleHelp, ClipboardList, Trophy} from "lucide-react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 
@@ -30,6 +30,12 @@ const sidebarLinks = [
         icon: BookOpen,
         isActive: (pathname: string) => pathname === "/articles" || pathname.startsWith("/articles/"),
     },
+    {
+        title: "FAQ",
+        href: "/faq",
+        icon: CircleHelp,
+        isActive: (pathname: string) => pathname === "/faq" || pathname.startsWith("/faq/"),
+    },
 ];
 
 export function CollapsibleMenu() {
@@ -41,7 +47,7 @@ export function CollapsibleMenu() {
                 Categories
             </SidebarGroupLabel>
             <SidebarGroupContent>
-                <SidebarMenu className="gap-1 px-2">
+                <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
                     {sidebarLinks.map((item) => {
                         const Icon = item.icon;
 
