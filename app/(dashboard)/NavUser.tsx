@@ -7,15 +7,42 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import {BadgeCheck, Bell, ChevronsUpDown, ClipboardList, CreditCard, LogOut, Sparkles, Trophy} from "lucide-react";
-import {UserAvatar,useClerk,useUser} from "@clerk/nextjs";
+import {BadgeCheck, Bell, ChevronsUpDown, ClipboardList, CreditCard, LogIn, LogOut, Sparkles, Trophy, UserPlus} from "lucide-react";
+import {SignInButton, SignUpButton, UserAvatar,useClerk,useUser} from "@clerk/nextjs";
 import Link from "next/link";
 
 export function NavUser() {
     const { isMobile } = useSidebar();
-    const {isSignedIn,user} = useUser();
+    const {isLoaded,isSignedIn,user} = useUser();
 
     const {openUserProfile,signOut} = useClerk();
+
+    if (!isLoaded) {
+        return null;
+    }
+
+    if (!isSignedIn) {
+        return (
+            <SidebarMenu>
+                <SidebarMenuItem>
+                    <SignInButton>
+                        <SidebarMenuButton tooltip="Sign in">
+                            <LogIn />
+                            <span>Sign in</span>
+                        </SidebarMenuButton>
+                    </SignInButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                    <SignUpButton>
+                        <SidebarMenuButton tooltip="Sign up" className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground">
+                            <UserPlus />
+                            <span>Sign up</span>
+                        </SidebarMenuButton>
+                    </SignUpButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
+        )
+    }
 
     return (
         <SidebarMenu>
