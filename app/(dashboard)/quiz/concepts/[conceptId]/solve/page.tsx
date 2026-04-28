@@ -10,7 +10,7 @@ export async function generateMetadata(
     { params }: {params:Promise<{ conceptId: string }>}): Promise<Metadata> {
     // read route params
     const { conceptId } = await params
-    
+
     // fetch data
     const concept = await getConceptByIdentifier(conceptId).then((result)=>result[0]);
 

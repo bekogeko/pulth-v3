@@ -15,6 +15,7 @@ import {
 } from "@/app/(dashboard)/quiz/quiz";
 import type {QuestionConceptRating} from "@/app/(dashboard)/quiz/quiz";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
+import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolveSkeleton";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
@@ -227,6 +228,10 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
         setSelectedOptions({});
         setCheckedQuestions({});
         setIsComplete(false);
+    }
+
+    if (isSourceLoading || isLoading) {
+        return <QuizSolveSkeleton withPagePadding={false} />;
     }
 
     return (
@@ -443,23 +448,6 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                         </div>
                     </CardContent>
                 </Card>
-            ) : null}
-
-            {isLoading ? (
-                <div className="space-y-4">
-                    {Array.from({length: 3}).map((_, index) => (
-                        <Card key={index}>
-                            <CardHeader>
-                                <Skeleton className="h-6 w-3/4" />
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <Skeleton className="h-14 w-full" />
-                                <Skeleton className="h-14 w-full" />
-                                <Skeleton className="h-14 w-full" />
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
             ) : null}
 
             {isError ? (
