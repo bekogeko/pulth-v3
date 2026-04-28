@@ -1,15 +1,19 @@
 import {
     boolean,
     integer,
+    jsonb,
     pgTable,
+    text,
     varchar,
     primaryKey,
     timestamp,
     uniqueIndex,
     unique,
-    foreignKey, doublePrecision
+    foreignKey, doublePrecision,
+    index,
 } from "drizzle-orm/pg-core";
 import {sql} from "drizzle-orm";
+import type {EditorJsOutput} from "@/schemas/EditorTypes";
 
 
 export const quizTable = pgTable("quizzes", {
@@ -18,6 +22,30 @@ export const quizTable = pgTable("quizzes", {
     description: varchar({ length: 255 }).notNull(),
     slug: varchar({ length: 127 }).unique().notNull(),
 });
+
+export const articleTable = pgTable("articles", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+
+    // Used only while migrating/importing old MongoDB documents.
+    legacyMongoId: varchar("legacy_mongo_id", { length: 24 }).unique(),
+
+    authorId: varchar("author_id", { length: 255 }).notNull(),
+    title: varchar({ length: 255 }).notNull(),
+    description: text().notNull(),
+    slug: varchar({ length: 255 }).unique().notNull(),
+
+    body: jsonb().$type<EditorJsOutput>().notNull(),
+    draftBody: jsonb("draft_body").$type<EditorJsOutput>(),
+
+    isPublished: boolean("is_published").default(false).notNull(),
+    publishedAt: timestamp("published_at"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({
+    authorIdx: index("articles_author_id_idx").on(t.authorId),
+    publishedIdx: index("articles_is_published_idx").on(t.isPublished),
+}));
 
 export const questionTable = pgTable("questions", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
