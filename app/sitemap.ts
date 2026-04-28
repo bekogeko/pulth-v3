@@ -1,24 +1,13 @@
 import type { MetadataRoute } from "next";
 
-import { conceptTable, quizTable } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+import { articleTable, conceptTable, quizTable } from "@/db/schema";
 import { database } from "@/lib/database";
-
-const DEFAULT_SITE_URL = "http://localhost:3000";
-
-function getSiteUrl() {
-    const rawUrl =
-        process.env.NEXT_PUBLIC_SITE_URL ??
-        process.env.SITE_URL ??
-        process.env.VERCEL_PROJECT_PRODUCTION_URL ??
-        process.env.VERCEL_URL ??
-        DEFAULT_SITE_URL;
-    const url = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
-
-    return url.replace(/\/$/, "");
-}
+import { getAbsoluteUrl } from "@/lib/site-url";
 
 function route(path: string) {
-    return `${getSiteUrl()}${path}`;
+    return getAbsoluteUrl(path);
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -42,12 +31,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: "daily",
             priority: 0.7,
         },
+        {
+            url: route("/articles"),
+            lastModified: now,
+            changeFrequency: "weekly",
+            priority: 0.7,
+        },
     ];
 
     try {
-        const [quizzes, concepts] = await Promise.all([
+        const [quizzes, concepts, articles] = await Promise.all([
             database.select({ slug: quizTable.slug }).from(quizTable),
             database.select({ slug: conceptTable.slug }).from(conceptTable),
+            database
+                .select({
+                    slug: articleTable.slug,
+                    updatedAt: articleTable.updatedAt,
+                    publishedAt: articleTable.publishedAt,
+                    createdAt: articleTable.createdAt,
+                })
+                .from(articleTable)
+                .where(eq(articleTable.isPublished, true)),
         ]);
 
         return [
@@ -63,6 +67,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 lastModified: now,
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
+            })),
+            ...articles.map(({ slug, updatedAt, publishedAt, createdAt }) => ({
+                url: route(`/articles/${slug}`),
+                lastModified: updatedAt ?? publishedAt ?? createdAt,
+                changeFrequency: "weekly" as const,
+                priority: 0.7,
             })),
         ];
     } catch {
