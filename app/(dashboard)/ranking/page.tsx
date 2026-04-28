@@ -296,103 +296,146 @@ export default async function RankingPage() {
                 </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardDescription>Ranked concepts</CardDescription>
-                        <CardTitle>{rankings.length}</CardTitle>
+                        <CardDescription className="flex items-center gap-1">
+                            <BarChart3 className="size-3.5" />
+                            Topics
+                        </CardDescription>
+                        <CardTitle>{topicRankings.length}</CardTitle>
                     </CardHeader>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardDescription>Average rating</CardDescription>
-                        <CardTitle>{formatRating(averageRating)}</CardTitle>
+                        <CardDescription className="flex items-center gap-1">
+                            <Target className="size-3.5" />
+                            Ranked concepts
+                        </CardDescription>
+                        <CardTitle>{ratedConcepts.length}</CardTitle>
                     </CardHeader>
                 </Card>
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardDescription>User ratings</CardDescription>
+                        <CardDescription className="flex items-center gap-1">
+                            <Users className="size-3.5" />
+                            Learner ratings
+                        </CardDescription>
                         <CardTitle>{ratedUsers}</CardTitle>
+                    </CardHeader>
+                </Card>
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardDescription className="flex items-center gap-1">
+                            <Trophy className="size-3.5" />
+                            Community average
+                        </CardDescription>
+                        <CardTitle>{formatRating(averageRating)}</CardTitle>
                     </CardHeader>
                 </Card>
             </div>
 
-            <Card>
-                <CardHeader className="gap-3">
-                    <div className="flex items-center gap-2">
-                        <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
-                            <BarChart3 className="size-4" />
+            {topConcept ? (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium">Top community concept</p>
+                            <p className="truncate text-sm text-muted-foreground">
+                                {topConcept.name} leads with an average rating of {formatRating(topConcept.averageRating)}.
+                            </p>
                         </div>
-                        <div className="space-y-1">
-                            <CardTitle>Concept Leaderboard</CardTitle>
-                            <CardDescription>
-                                Ranked by average user Elo rating for each concept.
-                            </CardDescription>
-                        </div>
+                        {topConcept.slug && topConcept.questionCount > 0 ? (
+                            <Button asChild variant="outline" size="sm" className="w-full bg-background sm:w-auto">
+                                <Link href={`/quiz/concepts/${topConcept.slug}/solve`} prefetch={false}>
+                                    <ArrowUpRight className="size-3" />
+                                    Practice
+                                </Link>
+                            </Button>
+                        ) : null}
                     </div>
-                </CardHeader>
-                <CardContent>
-                    {rankings.length ? (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-16">Rank</TableHead>
-                                    <TableHead>Concept</TableHead>
-                                    <TableHead className="text-right">Average</TableHead>
-                                    <TableHead className="text-right">Top</TableHead>
-                                    <TableHead className="text-right">Users</TableHead>
-                                    <TableHead className="text-right">Events</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rankings.map((ranking, index) => (
-                                    <TableRow key={ranking.conceptId}>
-                                        <TableCell className="font-medium">
-                                            {index + 1}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="min-w-0 space-y-1">
-                                                <p className="font-medium text-foreground">
-                                                    {ranking.conceptName}
-                                                    {ranking.conceptId === topConcept?.conceptId ? (
-                                                        <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[0.625rem] text-primary">
-                                                            Leading
-                                                        </span>
-                                                    ) : null}
-                                                </p>
-                                                {ranking.conceptDescription ? (
-                                                    <p className="max-w-xl truncate text-xs text-muted-foreground">
-                                                        {ranking.conceptDescription}
-                                                    </p>
-                                                ) : null}
+                </div>
+            ) : null}
+
+            {topicRankings.length ? (
+                <div className="space-y-4">
+                    {topicRankings.map((topic) => {
+                        const leadingConceptId = topic.concepts.find((concept) => concept.averageRating !== null)?.id;
+                        const ratedCount = topic.concepts.filter((concept) => concept.averageRating !== null).length;
+
+                        return (
+                            <Card key={topic.id}>
+                                <CardHeader className="gap-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div className="flex min-w-0 gap-2">
+                                            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                                <BarChart3 className="size-4" />
                                             </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">
-                                            {formatRating(ranking.averageRating)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {formatRating(ranking.topRating)}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            {Number(ranking.ratedUsers)}
-                                        </TableCell>
-                                        <TableCell className="text-right text-muted-foreground">
-                                            {Number(ranking.ratingEvents)}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    ) : (
+                                            <div className="min-w-0 space-y-1">
+                                                <CardTitle className="truncate">{topic.title}</CardTitle>
+                                                <CardDescription className="line-clamp-2">
+                                                    {topic.description}
+                                                </CardDescription>
+                                            </div>
+                                        </div>
+                                        <div className="flex shrink-0 flex-wrap gap-2 text-xs text-muted-foreground">
+                                            <span className="rounded-full border border-border px-2 py-1">
+                                                {ratedCount}/{topic.concepts.length} ranked
+                                            </span>
+                                            {leadingConceptId ? (
+                                                <span className="rounded-full border border-border px-2 py-1">
+                                                    Top: {topic.concepts.find((concept) => concept.id === leadingConceptId)?.name}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="space-y-5">
+                                    <TopicRankingChart concepts={topic.concepts} />
+
+                                    {topic.concepts.length ? (
+                                        <div className="space-y-2">
+                                            <div className={cn("hidden px-4 text-xs font-medium text-muted-foreground md:grid", rankingGridColumns)}>
+                                                <span>Concept</span>
+                                                <span className="text-right">Community</span>
+                                                {isAuthenticated ? <span className="text-right">You</span> : null}
+                                                <span className="text-right">Learners</span>
+                                                <span className="text-right">Action</span>
+                                            </div>
+                                            {topic.concepts.map((concept, index) => (
+                                                <ConceptRankingRow
+                                                    key={concept.id}
+                                                    concept={concept}
+                                                    index={index}
+                                                    leadingConceptId={leadingConceptId}
+                                                    showUserRating={isAuthenticated}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-lg border border-dashed border-border p-6 text-center">
+                                            <p className="text-sm font-medium">No concepts in this topic</p>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                Concepts will appear here when this topic has practice material.
+                                            </p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
+            ) : (
+                <Card>
+                    <CardContent className="pt-6">
                         <div className="rounded-lg border border-dashed border-border p-8 text-center">
                             <p className="text-sm font-medium">No rankings yet</p>
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Rankings appear after users solve quiz questions attached to concepts.
+                                Rankings appear after topics and practice concepts are added.
                             </p>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }
