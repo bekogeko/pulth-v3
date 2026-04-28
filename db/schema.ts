@@ -109,6 +109,20 @@ export const topicTable = pgTable("topics", {
     slug: varchar({ length: 127 }).unique().notNull(),
 });
 
+export const articleConceptsTable = pgTable("article_concepts", {
+    articleId: integer("article_id").references(() => articleTable.id, {onDelete: "cascade"}).notNull(),
+    conceptId: integer("concept_id").references(() => conceptTable.id, {onDelete: "cascade"}).notNull(),
+}, (t) => ({
+    pk: primaryKey({columns: [t.articleId, t.conceptId]}),
+}));
+
+export const articleTopicsTable = pgTable("article_topics", {
+    articleId: integer("article_id").references(() => articleTable.id, {onDelete: "cascade"}).notNull(),
+    topicId: integer("topic_id").references(() => topicTable.id, {onDelete: "cascade"}).notNull(),
+}, (t) => ({
+    pk: primaryKey({columns: [t.articleId, t.topicId]}),
+}));
+
 export const topicConceptsTable = pgTable("topic_concepts", {
     topicId: integer().references(()=>topicTable.id,{onDelete:"cascade"}).notNull(),
     conceptId: integer().references(()=>conceptTable.id,{onDelete:"cascade"}).notNull(),

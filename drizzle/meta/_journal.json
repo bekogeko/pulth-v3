@@ -113,6 +113,13 @@
       "when": 1777386753210,
       "tag": "0015_panoramic_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777398321300,
+      "tag": "0016_minor_psynapse",
+      "breakpoints": true
     }
   ]
 }
