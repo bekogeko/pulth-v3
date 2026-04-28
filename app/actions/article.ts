@@ -29,6 +29,7 @@ export async function getArticleBySlug(slug: string) {
             body: articleTable.body,
             publishedAt: articleTable.publishedAt,
             createdAt: articleTable.createdAt,
+            updatedAt: articleTable.updatedAt,
         })
         .from(articleTable)
         .where(and(
