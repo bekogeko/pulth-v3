@@ -16,5 +16,10 @@ export default function InlineRenderer(props: { text: string }) {
         },
     });
 
-    return <span dangerouslySetInnerHTML={{__html: cleanData}}/>;
+    return (
+        <span
+            className="[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-primary/80"
+            dangerouslySetInnerHTML={{__html: cleanData}}
+        />
+    );
 }
