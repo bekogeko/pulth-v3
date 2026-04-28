@@ -51,7 +51,7 @@ export default async function ArticlesPage() {
                     <div className="divide-y divide-border rounded-lg border border-border bg-card">
                         {articles.map((article) => (
                             <article key={article.id} className="p-5 transition-colors hover:bg-muted/40 sm:p-6">
-                                <Link href={`/app/(dashboard)/articles/${article.slug}`} className="group block">
+                                <Link href={`/articles/${article.slug}`} className="group block">
                                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0 space-y-2">
                                             <p className="text-xs font-medium text-muted-foreground">
