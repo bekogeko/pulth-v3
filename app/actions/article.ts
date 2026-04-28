@@ -168,3 +168,412 @@ export async function getArticleBySlug(slug: string) {
 
     return article;
 }
+
+export async function getMyArticles() {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return [];
+    }
+
+    type ConceptJson = {
+        id: number;
+        name: string;
+    };
+
+    type TopicJson = {
+        id: number;
+        title: string;
+    };
+
+    const conceptsSq = database
+        .select({
+            concepts: sql<ConceptJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${conceptTable.id},
+                            'name', ${conceptTable.name}
+                        )
+                        order by ${conceptTable.name}
+                    ),
+                    '[]'::json
+                )
+            `.as("concepts"),
+        })
+        .from(articleConceptsTable)
+        .innerJoin(conceptTable, eq(articleConceptsTable.conceptId, conceptTable.id))
+        .where(eq(articleConceptsTable.articleId, articleTable.id))
+        .as("article_concepts_sq");
+
+    const topicsSq = database
+        .select({
+            topics: sql<TopicJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${topicTable.id},
+                            'title', ${topicTable.title}
+                        )
+                        order by ${topicTable.title}
+                    ),
+                    '[]'::json
+                )
+            `.as("topics"),
+        })
+        .from(articleTopicsTable)
+        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
+        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .as("article_topics_sq");
+
+    return database
+        .select({
+            id: articleTable.id,
+            title: articleTable.title,
+            description: articleTable.description,
+            slug: articleTable.slug,
+            isPublished: articleTable.isPublished,
+            publishedAt: articleTable.publishedAt,
+            updatedAt: articleTable.updatedAt,
+            createdAt: articleTable.createdAt,
+            concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
+            topics: sql<TopicJson[]>`coalesce(${topicsSq.topics}, '[]'::json)`,
+        })
+        .from(articleTable)
+        .where(eq(articleTable.authorId, userId))
+        .leftJoinLateral(conceptsSq, sql`true`)
+        .leftJoinLateral(topicsSq, sql`true`)
+        .orderBy(desc(articleTable.updatedAt), desc(articleTable.createdAt));
+}
+
+export async function getArticleEditorOptions() {
+    const {isAuthenticated} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            concepts: [],
+            topics: [],
+        };
+    }
+
+    const [concepts, topics] = await Promise.all([
+        database
+            .select({
+                id: conceptTable.id,
+                name: conceptTable.name,
+            })
+            .from(conceptTable)
+            .orderBy(asc(conceptTable.name)),
+        database
+            .select({
+                id: topicTable.id,
+                title: topicTable.title,
+            })
+            .from(topicTable)
+            .orderBy(asc(topicTable.title)),
+    ]);
+
+    return {
+        concepts,
+        topics,
+    };
+}
+
+export async function getMyArticleForEdit(slug: string) {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return null;
+    }
+
+    type ConceptJson = {
+        id: number;
+        name: string;
+    };
+
+    type TopicJson = {
+        id: number;
+        title: string;
+    };
+
+    const conceptsSq = database
+        .select({
+            concepts: sql<ConceptJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${conceptTable.id},
+                            'name', ${conceptTable.name}
+                        )
+                        order by ${conceptTable.name}
+                    ),
+                    '[]'::json
+                )
+            `.as("concepts"),
+        })
+        .from(articleConceptsTable)
+        .innerJoin(conceptTable, eq(articleConceptsTable.conceptId, conceptTable.id))
+        .where(eq(articleConceptsTable.articleId, articleTable.id))
+        .as("article_editor_concepts_sq");
+
+    const topicsSq = database
+        .select({
+            topics: sql<TopicJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${topicTable.id},
+                            'title', ${topicTable.title}
+                        )
+                        order by ${topicTable.title}
+                    ),
+                    '[]'::json
+                )
+            `.as("topics"),
+        })
+        .from(articleTopicsTable)
+        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
+        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .as("article_editor_topics_sq");
+
+    const [article] = await database
+        .select({
+            id: articleTable.id,
+            title: articleTable.title,
+            description: articleTable.description,
+            slug: articleTable.slug,
+            body: articleTable.body,
+            draftBody: articleTable.draftBody,
+            isPublished: articleTable.isPublished,
+            publishedAt: articleTable.publishedAt,
+            updatedAt: articleTable.updatedAt,
+            concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
+            topics: sql<TopicJson[]>`coalesce(${topicsSq.topics}, '[]'::json)`,
+        })
+        .from(articleTable)
+        .where(and(
+            eq(articleTable.slug, slug),
+            eq(articleTable.authorId, userId),
+        ))
+        .leftJoinLateral(conceptsSq, sql`true`)
+        .leftJoinLateral(topicsSq, sql`true`)
+        .limit(1);
+
+    return article ?? null;
+}
+
+export async function createArticleDraft(_prevState: ArticleMutationState, formData: FormData): Promise<ArticleMutationState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {status: "error", message: "You must be signed in to create an article."};
+    }
+
+    const title = String(formData.get("title") ?? "").trim();
+    const description = String(formData.get("description") ?? "").trim();
+
+    if (!title) {
+        return {status: "error", message: "Enter a title."};
+    }
+
+    if (title.length > 255) {
+        return {status: "error", message: "Title must be 255 characters or fewer."};
+    }
+
+    if (!description) {
+        return {status: "error", message: "Enter a description."};
+    }
+
+    const slug = await createUniqueSlug(title);
+
+    try {
+        await database.insert(articleTable).values({
+            authorId: userId,
+            title,
+            description,
+            slug,
+            body: EMPTY_EDITOR_BODY,
+            draftBody: EMPTY_EDITOR_BODY,
+            isPublished: false,
+        });
+
+        revalidatePath("/articles/self");
+
+        return {
+            status: "success",
+            message: "Article draft created.",
+            slug,
+        };
+    } catch {
+        return {status: "error", message: "Unable to create the article right now."};
+    }
+}
+
+export async function saveArticleDraft(input: {
+    slug: string;
+    title: string;
+    description: string;
+    body: EditorJsOutput;
+    conceptIds: number[];
+    topicIds: number[];
+}) {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {status: "error" as const, message: "You must be signed in to save this article."};
+    }
+
+    const title = input.title.trim();
+    const description = input.description.trim();
+    const conceptIds = normalizeIds(input.conceptIds);
+    const topicIds = normalizeIds(input.topicIds);
+
+    if (!title) {
+        return {status: "error" as const, message: "Enter a title."};
+    }
+
+    if (title.length > 255) {
+        return {status: "error" as const, message: "Title must be 255 characters or fewer."};
+    }
+
+    if (!description) {
+        return {status: "error" as const, message: "Enter a description."};
+    }
+
+    if (!isEditorJsOutput(input.body)) {
+        return {status: "error" as const, message: "Article body is not valid EditorJS data."};
+    }
+
+    const taxonomyError = await assertTaxonomyExists(conceptIds, topicIds);
+    if (taxonomyError) {
+        return {status: "error" as const, message: taxonomyError};
+    }
+
+    const [article] = await database
+        .select({id: articleTable.id})
+        .from(articleTable)
+        .where(and(
+            eq(articleTable.slug, input.slug),
+            eq(articleTable.authorId, userId),
+        ))
+        .limit(1);
+
+    if (!article) {
+        return {status: "error" as const, message: "Article not found or you do not have access to it."};
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .update(articleTable)
+                .set({
+                    title,
+                    description,
+                    draftBody: input.body,
+                    updatedAt: new Date(),
+                })
+                .where(eq(articleTable.id, article.id));
+
+            await updateArticleTaxonomy(tx, {
+                articleId: article.id,
+                conceptIds,
+                topicIds,
+            });
+        });
+
+        revalidatePath("/articles/self");
+        revalidatePath(`/articles/${input.slug}`);
+        revalidatePath(`/articles/${input.slug}/edit`);
+
+        return {status: "success" as const, message: "Draft saved."};
+    } catch {
+        return {status: "error" as const, message: "Unable to save the draft right now."};
+    }
+}
+
+export async function publishArticleDraft(slug: string) {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {status: "error" as const, message: "You must be signed in to publish this article."};
+    }
+
+    const [article] = await database
+        .select({
+            id: articleTable.id,
+            draftBody: articleTable.draftBody,
+            body: articleTable.body,
+            publishedAt: articleTable.publishedAt,
+        })
+        .from(articleTable)
+        .where(and(
+            eq(articleTable.slug, slug),
+            eq(articleTable.authorId, userId),
+        ))
+        .limit(1);
+
+    if (!article) {
+        return {status: "error" as const, message: "Article not found or you do not have access to it."};
+    }
+
+    try {
+        await database
+            .update(articleTable)
+            .set({
+                body: article.draftBody ?? article.body,
+                isPublished: true,
+                publishedAt: article.publishedAt ?? new Date(),
+                updatedAt: new Date(),
+            })
+            .where(eq(articleTable.id, article.id));
+
+        revalidatePath("/articles");
+        revalidatePath("/articles/self");
+        revalidatePath(`/articles/${slug}`);
+        revalidatePath(`/articles/${slug}/edit`);
+
+        return {status: "success" as const, message: "Article published."};
+    } catch {
+        return {status: "error" as const, message: "Unable to publish the article right now."};
+    }
+}
+
+export async function unpublishArticle(slug: string) {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {status: "error" as const, message: "You must be signed in to unpublish this article."};
+    }
+
+    const [article] = await database
+        .select({id: articleTable.id})
+        .from(articleTable)
+        .where(and(
+            eq(articleTable.slug, slug),
+            eq(articleTable.authorId, userId),
+        ))
+        .limit(1);
+
+    if (!article) {
+        return {status: "error" as const, message: "Article not found or you do not have access to it."};
+    }
+
+    try {
+        await database
+            .update(articleTable)
+            .set({
+                isPublished: false,
+                updatedAt: new Date(),
+            })
+            .where(eq(articleTable.id, article.id));
+
+        revalidatePath("/articles");
+        revalidatePath("/articles/self");
+        revalidatePath(`/articles/${slug}`);
+        revalidatePath(`/articles/${slug}/edit`);
+
+        return {status: "success" as const, message: "Article unpublished."};
+    } catch {
+        return {status: "error" as const, message: "Unable to unpublish the article right now."};
+    }
+}
