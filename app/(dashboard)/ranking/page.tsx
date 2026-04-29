@@ -1,40 +1,58 @@
 import Link from "next/link";
 import {auth} from "@clerk/nextjs/server";
-import {asc, count, countDistinct, desc, eq, sql} from "drizzle-orm";
-import {ArrowUpRight, BarChart3, ClipboardList, PlayCircle, Target, Trophy, Users} from "lucide-react";
+import {and, asc, countDistinct, desc, eq, sql} from "drizzle-orm";
+import {ArrowUpRight, BarChart3, ClipboardList, Flame, PlayCircle, Target, Trophy, Users} from "lucide-react";
 
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import {
     conceptTable,
+    questionConceptRatingTable,
     questionConceptsTable,
     topicConceptsTable,
     topicTable,
     userConceptRatingTable,
 } from "@/db/schema";
 import {database} from "@/lib/database";
-import {cn} from "@/lib/utils";
 
-async function getTopicConceptRankings(userId?: string) {
-    const ratingStatsSq = database
+async function getDifficultTopicConcepts(userId?: string) {
+    const communityStatsSq = database
         .select({
             conceptId: conceptTable.id,
-            averageRating: sql<number>`avg(${userConceptRatingTable.rating})`.as("average_rating"),
             ratedUsers: countDistinct(userConceptRatingTable.userId).as("rated_users"),
         })
         .from(conceptTable)
         .innerJoin(userConceptRatingTable, eq(userConceptRatingTable.conceptId, conceptTable.id))
         .groupBy(conceptTable.id)
-        .as("rating_stats_sq");
+        .as("community_stats_sq");
 
-    const questionStatsSq = database
+    const difficultyStatsSq = database
         .select({
             conceptId: questionConceptsTable.conceptId,
-            questionCount: count(questionConceptsTable.questionId).as("question_count"),
+            questionCount: countDistinct(questionConceptsTable.questionId).as("question_count"),
+            ratedQuestions: countDistinct(questionConceptRatingTable.questionId).as("rated_questions"),
+            difficultyRating: sql<number>`
+                coalesce(avg(${questionConceptRatingTable.rating}), 1000)
+            `.as("difficulty_rating"),
         })
         .from(questionConceptsTable)
+        .leftJoin(
+            questionConceptRatingTable,
+            and(
+                eq(questionConceptRatingTable.questionId, questionConceptsTable.questionId),
+                eq(questionConceptRatingTable.conceptId, questionConceptsTable.conceptId),
+            )
+        )
         .groupBy(questionConceptsTable.conceptId)
-        .as("question_stats_sq");
+        .as("difficulty_stats_sq");
 
     const rows = await database
         .select({
@@ -45,34 +63,51 @@ async function getTopicConceptRankings(userId?: string) {
             conceptSlug: conceptTable.slug,
             conceptName: conceptTable.name,
             conceptDescription: conceptTable.description,
-            averageRating: ratingStatsSq.averageRating,
-            ratedUsers: ratingStatsSq.ratedUsers,
-            questionCount: questionStatsSq.questionCount,
+            difficultyRating: difficultyStatsSq.difficultyRating,
+            ratedQuestions: difficultyStatsSq.ratedQuestions,
+            questionCount: difficultyStatsSq.questionCount,
+            ratedUsers: communityStatsSq.ratedUsers,
         })
         .from(topicTable)
         .leftJoin(topicConceptsTable, eq(topicTable.id, topicConceptsTable.topicId))
         .leftJoin(conceptTable, eq(topicConceptsTable.conceptId, conceptTable.id))
-        .leftJoin(ratingStatsSq, eq(conceptTable.id, ratingStatsSq.conceptId))
-        .leftJoin(questionStatsSq, eq(conceptTable.id, questionStatsSq.conceptId))
+        .leftJoin(difficultyStatsSq, eq(conceptTable.id, difficultyStatsSq.conceptId))
+        .leftJoin(communityStatsSq, eq(conceptTable.id, communityStatsSq.conceptId))
         .orderBy(
-            asc(topicTable.title),
-            desc(sql`coalesce(${ratingStatsSq.averageRating}, 0)`),
+            desc(sql`coalesce(${difficultyStatsSq.difficultyRating}, 0)`),
+            desc(sql`coalesce(${difficultyStatsSq.questionCount}, 0)`),
             asc(conceptTable.name),
         );
 
-    const userRatings = userId
+    const userRanksSq = database
+        .select({
+            conceptId: userConceptRatingTable.conceptId,
+            userId: userConceptRatingTable.userId,
+            rating: userConceptRatingTable.rating,
+            rank: sql<number>`
+                rank() over (
+                    partition by ${userConceptRatingTable.conceptId}
+                    order by ${userConceptRatingTable.rating} desc
+                )
+            `.as("rank"),
+        })
+        .from(userConceptRatingTable)
+        .as("user_ranks_sq");
+
+    const userRanks = userId
         ? await database
             .select({
-                conceptId: userConceptRatingTable.conceptId,
-                rating: userConceptRatingTable.rating,
+                conceptId: userRanksSq.conceptId,
+                rating: userRanksSq.rating,
+                rank: userRanksSq.rank,
             })
-            .from(userConceptRatingTable)
-            .where(eq(userConceptRatingTable.userId, userId))
+            .from(userRanksSq)
+            .where(eq(userRanksSq.userId, userId))
         : [];
-    const userRatingByConceptId = new Map(
-        userRatings
-            .filter((rating) => rating.conceptId !== null)
-            .map((rating) => [rating.conceptId, rating.rating])
+    const userRankByConceptId = new Map(
+        userRanks
+            .filter((ranking) => ranking.conceptId !== null)
+            .map((ranking) => [ranking.conceptId, ranking])
     );
 
     return rows.reduce<TopicRanking[]>((topics, row) => {
@@ -94,15 +129,28 @@ async function getTopicConceptRankings(userId?: string) {
                 slug: row.conceptSlug,
                 name: row.conceptName,
                 description: row.conceptDescription,
-                averageRating: row.averageRating,
-                ratedUsers: Number(row.ratedUsers ?? 0),
+                difficultyRating: row.difficultyRating,
+                ratedQuestions: Number(row.ratedQuestions ?? 0),
                 questionCount: Number(row.questionCount ?? 0),
-                userRating: userRatingByConceptId.get(row.conceptId) ?? null,
+                ratedUsers: Number(row.ratedUsers ?? 0),
+                userRating: userRankByConceptId.get(row.conceptId)?.rating ?? null,
+                userRank: userRankByConceptId.get(row.conceptId)?.rank ?? null,
             });
         }
 
         return topics;
-    }, []);
+    }, []).map((topic) => ({
+        ...topic,
+        concepts: topic.concepts.sort((left, right) => (
+            getRatingValue(right.difficultyRating) - getRatingValue(left.difficultyRating)
+            || right.questionCount - left.questionCount
+            || String(left.name).localeCompare(String(right.name))
+        )),
+    })).sort((left, right) => (
+        getTopicDifficulty(right) - getTopicDifficulty(left)
+        || right.concepts.length - left.concepts.length
+        || left.title.localeCompare(right.title)
+    ));
 }
 
 function formatRating(rating: number | string | null) {
@@ -121,163 +169,55 @@ type ConceptRanking = {
     slug: string | null;
     name: string | null;
     description: string | null;
-    averageRating: number | string | null;
+    difficultyRating: number | string | null;
+    ratedQuestions: number;
     ratedUsers: number;
     questionCount: number;
     userRating: number | null;
+    userRank: number | null;
 };
 
 function getRatingValue(rating: number | string | null) {
     return Number(rating ?? 0);
 }
 
-function TopicRankingChart({concepts}: {concepts: ConceptRanking[]}) {
-    const ratedConcepts = concepts.filter((concept) => concept.averageRating !== null);
-    const maxRating = Math.max(...ratedConcepts.map((concept) => getRatingValue(concept.averageRating)), 0);
+function getDifficultyPercent(rating: number | string | null, maxRating: number) {
+    const value = getRatingValue(rating);
 
-    if (!ratedConcepts.length) {
-        return (
-            <div className="rounded-lg border border-dashed border-border p-6 text-center">
-                <p className="text-sm font-medium">No rated concepts yet</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    This topic will chart concepts after users solve attached questions.
-                </p>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-3">
-            {ratedConcepts.map((concept, index) => {
-                const value = getRatingValue(concept.averageRating);
-                const width = maxRating ? `${Math.max((value / maxRating) * 100, 8)}%` : "8%";
-
-                return (
-                    <div
-                        key={concept.id}
-                        className="grid gap-2 sm:grid-cols-[minmax(9rem,14rem)_minmax(0,1fr)_4rem] sm:items-center"
-                    >
-                        <div className="flex min-w-0 items-center gap-2">
-                            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
-                                {index + 1}
-                            </span>
-                            <span className="truncate text-sm font-medium">{concept.name}</span>
-                        </div>
-                        <div className="h-3 rounded-full bg-muted">
-                            <div
-                                className="h-3 rounded-full bg-primary"
-                                style={{width}}
-                            />
-                        </div>
-                        <div className="text-right text-sm font-medium">
-                            {formatRating(concept.averageRating)}
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
+    return maxRating ? Math.max((value / maxRating) * 100, 10) : 10;
 }
 
-function ConceptRankingRow({
-    concept,
-    index,
-    leadingConceptId,
-    showUserRating,
-}: {
-    concept: ConceptRanking;
-    index: number;
-    leadingConceptId: number | undefined;
-    showUserRating: boolean;
-}) {
-    const hasQuestions = concept.questionCount > 0;
-    const isLeading = concept.id === leadingConceptId;
-    const rowColumns = showUserRating
-        ? "md:grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_auto]"
-        : "md:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]";
+function getTopicDifficulty(topic: TopicRanking) {
+    const conceptsWithQuestions = topic.concepts.filter((concept) => concept.questionCount > 0);
 
-    return (
-        <div className={cn("grid gap-3 rounded-lg border border-border/70 bg-background px-4 py-3 md:items-center", rowColumns)}>
-            <div className="min-w-0 space-y-1">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
-                        {index + 1}
-                    </span>
-                    <p className="min-w-0 truncate font-medium leading-6 text-foreground">
-                        {concept.name}
-                    </p>
-                    {isLeading ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.625rem] font-medium text-primary">
-                            Leading
-                        </span>
-                    ) : null}
-                </div>
-                {concept.description ? (
-                    <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
-                        {concept.description}
-                    </p>
-                ) : null}
-            </div>
+    if (!conceptsWithQuestions.length) {
+        return 0;
+    }
 
-            <div className="flex items-center justify-between gap-3 text-sm md:block md:text-right">
-                <span className="text-muted-foreground md:hidden">Community</span>
-                <span className="font-medium">
-                    {concept.averageRating === null ? "Unrated" : formatRating(concept.averageRating)}
-                </span>
-            </div>
-
-            {showUserRating ? (
-                <div className="flex items-center justify-between gap-3 text-sm md:block md:text-right">
-                    <span className="text-muted-foreground md:hidden">You</span>
-                    <span className={concept.userRating === null ? "text-muted-foreground" : "font-medium"}>
-                        {concept.userRating === null ? "New" : formatRating(concept.userRating)}
-                    </span>
-                </div>
-            ) : null}
-
-            <div className="flex items-center justify-between gap-3 text-sm md:block md:text-right">
-                <span className="text-muted-foreground md:hidden">Learners</span>
-                <span className="font-medium">{concept.ratedUsers}</span>
-            </div>
-
-            {hasQuestions && concept.slug ? (
-                <Button asChild size="sm" className="w-full md:w-auto">
-                    <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
-                        <PlayCircle className="size-3" />
-                        Practice
-                    </Link>
-                </Button>
-            ) : (
-                <Button size="sm" className="w-full md:w-auto" disabled>
-                    <PlayCircle className="size-3" />
-                    No questions
-                </Button>
-            )}
-        </div>
-    );
+    return conceptsWithQuestions.reduce(
+        (total, concept) => total + getRatingValue(concept.difficultyRating),
+        0
+    ) / conceptsWithQuestions.length;
 }
 
 export default async function RankingPage() {
     const {isAuthenticated, userId} = await auth();
-    const topicRankings = await getTopicConceptRankings(userId ?? undefined);
+    const topicRankings = await getDifficultTopicConcepts(userId ?? undefined);
     const concepts = topicRankings.flatMap((topic) => topic.concepts);
-    const ratedConcepts = concepts.filter((concept) => concept.averageRating !== null);
-    const topConcept = ratedConcepts[0];
-    const averageRating = ratedConcepts.length
-        ? ratedConcepts.reduce((total, ranking) => total + Number(ranking.averageRating), 0) / ratedConcepts.length
+    const practiceConcepts = concepts.filter((concept) => concept.questionCount > 0);
+    const topConcept = practiceConcepts[0];
+    const topTopic = topicRankings.find((topic) => topic.concepts.some((concept) => concept.questionCount > 0));
+    const averageDifficulty = practiceConcepts.length
+        ? practiceConcepts.reduce((total, ranking) => total + Number(ranking.difficultyRating), 0) / practiceConcepts.length
         : 0;
-    const ratedUsers = ratedConcepts.reduce((total, ranking) => total + ranking.ratedUsers, 0);
-    const rankingGridColumns = isAuthenticated
-        ? "md:grid-cols-[minmax(0,1fr)_7rem_6rem_7rem_auto]"
-        : "md:grid-cols-[minmax(0,1fr)_7rem_7rem_auto]";
-
+    const ratedUsers = practiceConcepts.reduce((total, ranking) => total + ranking.ratedUsers, 0);
     return (
         <div className="flex min-w-0 flex-1 flex-col gap-6 p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div className="max-w-2xl space-y-1">
-                    <h2 className="text-lg font-semibold">Concept Rankings</h2>
+                    <h2 className="text-lg font-semibold">Difficult Topics</h2>
                     <p className="text-sm text-muted-foreground">
-                        See the strongest concepts in each topic, compare your rating, and jump into practice.
+                        See the hardest topics and concepts by question difficulty, then jump into focused practice.
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -287,12 +227,14 @@ export default async function RankingPage() {
                             Practice
                         </Link>
                     </Button>
-                    <Button asChild size="lg">
-                        <Link href="/ranking/self">
-                            <Trophy className="size-4" />
-                            My Ranks
-                        </Link>
-                    </Button>
+                    {isAuthenticated ? (
+                        <Button asChild size="lg">
+                            <Link href="/ranking/self">
+                                <Trophy className="size-4" />
+                                My Ranks
+                            </Link>
+                        </Button>
+                    ) : null}
                 </div>
             </div>
 
@@ -309,10 +251,10 @@ export default async function RankingPage() {
                 <Card>
                     <CardHeader className="pb-2">
                         <CardDescription className="flex items-center gap-1">
-                            <Target className="size-3.5" />
-                            Ranked concepts
+                            <Flame className="size-3.5" />
+                            Practice concepts
                         </CardDescription>
-                        <CardTitle>{ratedConcepts.length}</CardTitle>
+                        <CardTitle>{practiceConcepts.length}</CardTitle>
                     </CardHeader>
                 </Card>
                 <Card>
@@ -327,21 +269,21 @@ export default async function RankingPage() {
                 <Card>
                     <CardHeader className="pb-2">
                         <CardDescription className="flex items-center gap-1">
-                            <Trophy className="size-3.5" />
-                            Community average
+                            <Target className="size-3.5" />
+                            Average difficulty
                         </CardDescription>
-                        <CardTitle>{formatRating(averageRating)}</CardTitle>
+                        <CardTitle>{formatRating(averageDifficulty)}</CardTitle>
                     </CardHeader>
                 </Card>
             </div>
 
             {topConcept ? (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                            <p className="text-sm font-medium">Top community concept</p>
+                            <p className="text-sm font-medium">Most difficult concept</p>
                             <p className="truncate text-sm text-muted-foreground">
-                                {topConcept.name} leads with an average rating of {formatRating(topConcept.averageRating)}.
+                                {topConcept.name} is currently rated {formatRating(topConcept.difficultyRating)} for difficulty.
                             </p>
                         </div>
                         {topConcept.slug && topConcept.questionCount > 0 ? (
@@ -356,11 +298,62 @@ export default async function RankingPage() {
                 </div>
             ) : null}
 
+            {topTopic ? (
+                <Card>
+                    <CardHeader>
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="space-y-1">
+                                <CardTitle>Topics by Difficulty</CardTitle>
+                                <CardDescription>
+                                    Higher difficulty means attached questions are being missed more often.
+                                </CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {topicRankings.slice(0, 6).map((topic, index) => {
+                            const difficultConcept = topic.concepts.find((concept) => concept.questionCount > 0);
+
+                            return (
+                                <div key={topic.id} className="rounded-lg border border-border/70 px-4 py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-medium text-muted-foreground">#{index + 1}</p>
+                                            <p className="truncate font-medium">{topic.title}</p>
+                                        </div>
+                                        <span className="shrink-0 text-sm font-medium">
+                                            {formatRating(getTopicDifficulty(topic))}
+                                        </span>
+                                    </div>
+                                    {difficultConcept ? (
+                                        <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                                            <span className="min-w-0 truncate text-muted-foreground">
+                                                Hardest: {difficultConcept.name}
+                                            </span>
+                                            {difficultConcept.slug ? (
+                                                <Link
+                                                    href={`/quiz/concepts/${difficultConcept.slug}/solve`}
+                                                    prefetch={false}
+                                                    className="shrink-0 font-medium text-primary hover:underline"
+                                                >
+                                                    Practice
+                                                </Link>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            );
+                        })}
+                    </CardContent>
+                </Card>
+            ) : null}
+
             {topicRankings.length ? (
                 <div className="space-y-4">
                     {topicRankings.map((topic) => {
-                        const leadingConceptId = topic.concepts.find((concept) => concept.averageRating !== null)?.id;
-                        const ratedCount = topic.concepts.filter((concept) => concept.averageRating !== null).length;
+                        const mostDifficultConceptId = topic.concepts.find((concept) => concept.questionCount > 0)?.id;
+                        const practiceCount = topic.concepts.filter((concept) => concept.questionCount > 0).length;
+                        const maxDifficulty = Math.max(...topic.concepts.map((concept) => getRatingValue(concept.difficultyRating)), 0);
 
                         return (
                             <Card key={topic.id}>
@@ -379,37 +372,113 @@ export default async function RankingPage() {
                                         </div>
                                         <div className="flex shrink-0 flex-wrap gap-2 text-xs text-muted-foreground">
                                             <span className="rounded-full border border-border px-2 py-1">
-                                                {ratedCount}/{topic.concepts.length} ranked
+                                                {practiceCount}/{topic.concepts.length} with practice
                                             </span>
-                                            {leadingConceptId ? (
+                                            {mostDifficultConceptId ? (
                                                 <span className="rounded-full border border-border px-2 py-1">
-                                                    Top: {topic.concepts.find((concept) => concept.id === leadingConceptId)?.name}
+                                                    Hardest: {topic.concepts.find((concept) => concept.id === mostDifficultConceptId)?.name}
                                                 </span>
                                             ) : null}
                                         </div>
                                     </div>
                                 </CardHeader>
-                                <CardContent className="space-y-5">
-                                    <TopicRankingChart concepts={topic.concepts} />
-
+                                <CardContent>
                                     {topic.concepts.length ? (
-                                        <div className="space-y-2">
-                                            <div className={cn("hidden px-4 text-xs font-medium text-muted-foreground md:grid", rankingGridColumns)}>
-                                                <span>Concept</span>
-                                                <span className="text-right">Community</span>
-                                                {isAuthenticated ? <span className="text-right">You</span> : null}
-                                                <span className="text-right">Learners</span>
-                                                <span className="text-right">Action</span>
-                                            </div>
-                                            {topic.concepts.map((concept, index) => (
-                                                <ConceptRankingRow
-                                                    key={concept.id}
-                                                    concept={concept}
-                                                    index={index}
-                                                    leadingConceptId={leadingConceptId}
-                                                    showUserRating={isAuthenticated}
-                                                />
-                                            ))}
+                                        <div className="overflow-hidden rounded-lg border border-border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted/40">
+                                                        <TableHead className="w-14">#</TableHead>
+                                                        <TableHead>Concept</TableHead>
+                                                        <TableHead className="min-w-40">Difficulty</TableHead>
+                                                        {isAuthenticated ? <TableHead className="text-right">My rank</TableHead> : null}
+                                                        <TableHead className="text-right">Questions</TableHead>
+                                                        <TableHead className="text-right">Learners</TableHead>
+                                                        <TableHead className="text-right">Practice</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {topic.concepts.map((concept, index) => {
+                                                        const isMostDifficult = concept.id === mostDifficultConceptId;
+                                                        const difficultyPercent = getDifficultyPercent(concept.difficultyRating, maxDifficulty);
+
+                                                        return (
+                                                            <TableRow key={concept.id}>
+                                                                <TableCell className="font-medium text-muted-foreground">
+                                                                    {index + 1}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="min-w-0 space-y-1">
+                                                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                                            <p className="min-w-0 font-medium text-foreground">
+                                                                                {concept.name}
+                                                                            </p>
+                                                                            {isMostDifficult ? (
+                                                                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.625rem] font-medium text-primary">
+                                                                                    Hardest
+                                                                                </span>
+                                                                            ) : null}
+                                                                        </div>
+                                                                        {concept.description ? (
+                                                                            <p className="max-w-xl truncate text-xs text-muted-foreground">
+                                                                                {concept.description}
+                                                                            </p>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <div className="flex min-w-36 items-center gap-3">
+                                                                        <div className="h-2 min-w-20 flex-1 rounded-full bg-muted">
+                                                                            <div
+                                                                                className="h-2 rounded-full bg-primary"
+                                                                                style={{width: `${difficultyPercent}%`}}
+                                                                            />
+                                                                        </div>
+                                                                        <span className="w-11 text-right text-sm font-medium">
+                                                                            {formatRating(concept.difficultyRating)}
+                                                                        </span>
+                                                                    </div>
+                                                                </TableCell>
+                                                                {isAuthenticated ? (
+                                                                    <TableCell className="text-right">
+                                                                        {concept.userRank === null ? (
+                                                                            <span className="text-muted-foreground">New</span>
+                                                                        ) : (
+                                                                            <div className="font-medium">
+                                                                                #{concept.userRank}
+                                                                                <div className="text-xs font-normal text-muted-foreground">
+                                                                                    {formatRating(concept.userRating)}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </TableCell>
+                                                                ) : null}
+                                                                <TableCell className="text-right font-medium">
+                                                                    {concept.questionCount}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-medium">
+                                                                    {concept.ratedUsers}
+                                                                </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    {concept.questionCount > 0 && concept.slug ? (
+                                                                        <Button asChild size="sm" variant="outline">
+                                                                            <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                                                                <PlayCircle className="size-3" />
+                                                                                Practice
+                                                                            </Link>
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <Button size="sm" variant="outline" disabled>
+                                                                            <PlayCircle className="size-3" />
+                                                                            No questions
+                                                                        </Button>
+                                                                    )}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        );
+                                                    })}
+                                                </TableBody>
+                                            </Table>
                                         </div>
                                     ) : (
                                         <div className="rounded-lg border border-dashed border-border p-6 text-center">
