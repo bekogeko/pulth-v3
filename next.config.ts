@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  transpilePackages: [
+    "@editorjs/editorjs",
+    "@editorjs/header",
+    "@editorjs/list",
+  ],
 };
 
 export default nextConfig;
