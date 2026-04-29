@@ -10,6 +10,7 @@ import {
 import {database} from "@/lib/database";
 import type {EditorJsOutput} from "@/schemas/EditorTypes";
 import {auth} from "@clerk/nextjs/server";
+import {randomBytes} from "node:crypto";
 import {and, asc, desc, eq, inArray, sql} from "drizzle-orm";
 import {revalidatePath} from "next/cache";
 
@@ -31,13 +32,25 @@ type ArticleTaxonomyInput = {
     topicIds: number[];
 };
 
+const ARTICLE_SLUG_RANDOM_ID_LENGTH = 8;
+const ARTICLE_SLUG_RANDOM_ID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const ARTICLE_SLUG_MAX_LENGTH = 127;
+
 function slugify(input: string) {
     return input
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
-        .slice(0, 80);
+        .slice(0, ARTICLE_SLUG_MAX_LENGTH - ARTICLE_SLUG_RANDOM_ID_LENGTH - 1);
+}
+
+function createRandomSlugId() {
+    const bytes = randomBytes(ARTICLE_SLUG_RANDOM_ID_LENGTH);
+
+    return Array.from(bytes, (byte) => (
+        ARTICLE_SLUG_RANDOM_ID_ALPHABET[byte % ARTICLE_SLUG_RANDOM_ID_ALPHABET.length]
+    )).join("");
 }
 
 function normalizeIds(ids: number[]) {
@@ -46,10 +59,9 @@ function normalizeIds(ids: number[]) {
 
 async function createUniqueSlug(title: string) {
     const baseSlug = slugify(title) || "article";
-    let candidate = baseSlug;
-    let suffix = 2;
 
     while (true) {
+        const candidate = `${baseSlug}-${createRandomSlugId()}`;
         const [existingArticle] = await database
             .select({id: articleTable.id})
             .from(articleTable)
@@ -59,9 +71,6 @@ async function createUniqueSlug(title: string) {
         if (!existingArticle) {
             return candidate;
         }
-
-        candidate = `${baseSlug}-${suffix}`;
-        suffix += 1;
     }
 }
 
@@ -450,7 +459,11 @@ export async function saveArticleDraft(input: {
     }
 
     const [article] = await database
-        .select({id: articleTable.id})
+        .select({
+            id: articleTable.id,
+            title: articleTable.title,
+            slug: articleTable.slug,
+        })
         .from(articleTable)
         .where(and(
             eq(articleTable.slug, input.slug),
@@ -462,6 +475,8 @@ export async function saveArticleDraft(input: {
         return {status: "error" as const, message: "Article not found or you do not have access to it."};
     }
 
+    const slug = title === article.title ? article.slug : await createUniqueSlug(title);
+
     try {
         await database.transaction(async (tx) => {
             await tx
@@ -469,6 +484,7 @@ export async function saveArticleDraft(input: {
                 .set({
                     title,
                     description,
+                    slug,
                     draftBody: input.body,
                     updatedAt: new Date(),
                 })
@@ -484,8 +500,10 @@ export async function saveArticleDraft(input: {
         revalidatePath("/articles/self");
         revalidatePath(`/articles/${input.slug}`);
         revalidatePath(`/articles/${input.slug}/edit`);
+        revalidatePath(`/articles/${slug}`);
+        revalidatePath(`/articles/${slug}/edit`);
 
-        return {status: "success" as const, message: "Draft saved."};
+        return {status: "success" as const, message: "Draft saved.", slug};
     } catch {
         return {status: "error" as const, message: "Unable to save the draft right now."};
     }

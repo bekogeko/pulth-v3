@@ -1,7 +1,8 @@
 "use client";
 
-import {useEffect, useMemo, useRef, useState, useTransition} from "react";
+import {useDeferredValue, useEffect, useMemo, useRef, useState, useTransition} from "react";
 import Link from "next/link";
+import {useRouter} from "next/navigation";
 import {ArrowLeft, Eye, Send, Save, XCircle} from "lucide-react";
 import {toast} from "sonner";
 import type EditorJS from "@editorjs/editorjs";
@@ -33,8 +34,10 @@ type ArticleEditorProps = {
 };
 
 export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
+    const router = useRouter();
     const editorRef = useRef<EditorJS | null>(null);
     const holderId = useMemo(() => `article-editor-${article.id}`, [article.id]);
+    const [currentSlug, setCurrentSlug] = useState(article.slug);
     const [title, setTitle] = useState(article.title);
     const [description, setDescription] = useState(article.description);
     const [selectedConceptIds, setSelectedConceptIds] = useState(
@@ -94,6 +97,10 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
         };
     }, [article.body, article.draftBody, holderId]);
 
+    useEffect(() => {
+        setCurrentSlug(article.slug);
+    }, [article.slug]);
+
     function toggleConcept(conceptId: number) {
         setSelectedConceptIds((currentIds) => (
             currentIds.includes(conceptId)
@@ -122,7 +129,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
         startTransition(async () => {
             const body = await readEditorBody();
             const result = await saveArticleDraft({
-                slug: article.slug,
+                slug: currentSlug,
                 title,
                 description,
                 body,
@@ -132,6 +139,10 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
 
             if (result.status === "success") {
                 toast.success(result.message);
+                if (result.slug && result.slug !== currentSlug) {
+                    setCurrentSlug(result.slug);
+                    router.replace(`/articles/${result.slug}/edit`);
+                }
             } else {
                 toast.error(result.message);
             }
@@ -142,7 +153,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
         startTransition(async () => {
             const body = await readEditorBody();
             const saveResult = await saveArticleDraft({
-                slug: article.slug,
+                slug: currentSlug,
                 title,
                 description,
                 body,
@@ -155,10 +166,15 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                 return;
             }
 
-            const publishResult = await publishArticleDraft(article.slug);
+            const slug = saveResult.slug ?? currentSlug;
+            const publishResult = await publishArticleDraft(slug);
 
             if (publishResult.status === "success") {
                 setIsPublished(true);
+                if (slug !== currentSlug) {
+                    setCurrentSlug(slug);
+                    router.replace(`/articles/${slug}/edit`);
+                }
                 toast.success(publishResult.message);
             } else {
                 toast.error(publishResult.message);
@@ -168,7 +184,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
 
     function handleUnpublish() {
         startTransition(async () => {
-            const result = await unpublishArticle(article.slug);
+            const result = await unpublishArticle(currentSlug);
 
             if (result.status === "success") {
                 setIsPublished(false);
@@ -200,7 +216,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                 <div className="flex flex-wrap gap-2">
                     {isPublished ? (
                         <Button asChild variant="outline">
-                            <Link href={`/articles/${article.slug}`}>
+                            <Link href={`/articles/${currentSlug}`}>
                                 <Eye className="size-4"/>
                                 View
                             </Link>
@@ -297,11 +313,33 @@ function TaxonomySection({
     selectedIds: number[];
     onToggle: (id: number) => void;
 }) {
+    const [searchQuery, setSearchQuery] = useState("");
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const normalizedSearchQuery = deferredSearchQuery.trim().toLowerCase();
+    const filteredOptions = useMemo(() => (
+        normalizedSearchQuery
+            ? options.filter((option) => option.label.toLowerCase().includes(normalizedSearchQuery))
+            : options
+    ), [normalizedSearchQuery, options]);
+
     return (
         <section className="rounded-xl border bg-card p-4 shadow-sm">
-            <h3 className="text-sm font-medium">{title}</h3>
+            <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium">{title}</h3>
+                <p className="text-xs text-muted-foreground">
+                    {selectedIds.length} selected
+                </p>
+            </div>
+            <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder={`Search ${title.toLowerCase()}...`}
+                aria-label={`Search ${title.toLowerCase()}`}
+                className="mt-3"
+                disabled={!options.length}
+            />
             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                {options.length ? options.map((option) => {
+                {filteredOptions.length ? filteredOptions.map((option) => {
                     const inputId = `${title.toLowerCase()}-${option.id}`;
 
                     return (
@@ -320,7 +358,11 @@ function TaxonomySection({
                             <span>{option.label}</span>
                         </label>
                     );
-                }) : (
+                }) : options.length ? (
+                    <p className="text-sm text-muted-foreground">
+                        No {title.toLowerCase()} match your search.
+                    </p>
+                ) : (
                     <p className="text-sm text-muted-foreground">{emptyLabel}</p>
                 )}
             </div>

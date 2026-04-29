@@ -7,7 +7,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import {BadgeCheck, Bell, ChevronsUpDown, ClipboardList, CreditCard, LogIn, LogOut, Sparkles, Trophy, UserPlus} from "lucide-react";
+import {BadgeCheck, Bell, BookOpen, ChevronsUpDown, ClipboardList, CreditCard, LogIn, LogOut, Sparkles, Trophy, UserPlus} from "lucide-react";
 import {SignInButton, SignUpButton, UserAvatar,useClerk,useUser} from "@clerk/nextjs";
 import Link from "next/link";
 
@@ -89,6 +89,12 @@ export function NavUser() {
                                 <Link href="/quiz/self">
                                     <ClipboardList />
                                     My Quizzes
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href="/articles/self">
+                                    <BookOpen />
+                                    My Articles
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
