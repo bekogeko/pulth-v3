@@ -1,12 +1,23 @@
 "use client";
 
 import {useState} from "react";
+import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {ColumnDef} from "@tanstack/react-table";
-import {MoreHorizontal} from "lucide-react";
+import {Loader2, MoreHorizontal, Trash2} from "lucide-react";
+import {toast} from "sonner";
 
 import {EditConceptsDialog} from "@/app/(dashboard)/quiz/self/edit-concepts-dialog";
 import {EditOptionsDialog} from "@/app/(dashboard)/quiz/self/edit-options-dialog";
 import {Button} from "@/components/ui/button";
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -17,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
 import {EditQuizzesDialog} from "@/app/(dashboard)/quiz/self/edit-quizzes-dialog";
+import {deleteQuestion} from "@/app/(dashboard)/quiz/quiz";
 
 export type Question = {
     id: number;
@@ -117,9 +129,33 @@ function ConceptsCell({concepts}: { concepts: Question["concepts"] }) {
 }
 
 function RowActions({question}: { question: Question }) {
+    const queryClient = useQueryClient();
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
     const [isQuizzesDialogOpen, setIsQuizzesDialogOpen] = useState(false);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+    const deleteQuestionMutation = useMutation({
+        mutationFn: () => deleteQuestion({questionId: question.id}),
+        onSuccess: async (result) => {
+            if (result.status === "error") {
+                toast.error(result.message);
+                return;
+            }
+
+            await Promise.all([
+                queryClient.invalidateQueries({queryKey: ["quizzes"]}),
+                queryClient.invalidateQueries({queryKey: ["quizzes", "self"]}),
+                queryClient.invalidateQueries({queryKey: ["quiz"]}),
+            ]);
+
+            toast.success(result.message);
+            setIsDeleteDialogOpen(false);
+        },
+        onError: () => {
+            toast.error("Unable to delete the question right now.");
+        },
+    });
 
     return (
         <>
@@ -140,6 +176,14 @@ function RowActions({question}: { question: Question }) {
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setIsOptionDialogOpen(true)}>
                         Edit Options
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => setIsDeleteDialogOpen(true)}
+                    >
+                        <Trash2 className="size-4"/>
+                        Delete
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -176,6 +220,51 @@ function RowActions({question}: { question: Question }) {
                     quizzes={question.quizzes}
                 />
             ) : null}
+
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete question?</DialogTitle>
+                        <DialogDescription>
+                            This will remove the question, its answer choices, concept links, and quiz links.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+                        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            Question
+                        </p>
+                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-foreground">
+                            {question.question}
+                        </p>
+                    </div>
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={deleteQuestionMutation.isPending}
+                            >
+                                Cancel
+                            </Button>
+                        </DialogClose>
+                        <Button
+                            type="button"
+                            variant="destructive"
+                            onClick={() => deleteQuestionMutation.mutate()}
+                            disabled={deleteQuestionMutation.isPending}
+                        >
+                            {deleteQuestionMutation.isPending ? (
+                                <Loader2 className="size-4 animate-spin"/>
+                            ) : (
+                                <Trash2 className="size-4"/>
+                            )}
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

@@ -55,6 +55,15 @@ type UpdateQuestionQuizzesState = {
     message: string;
 };
 
+type DeleteQuestionInput = {
+    questionId: number;
+};
+
+type DeleteQuestionState = {
+    status: "success" | "error";
+    message: string;
+};
+
 type SubmitAnswerInput = {
     questionId: number;
     optionId: number;
@@ -664,6 +673,95 @@ export async function updateQuestionQuizzes({
         return {
             status: "error",
             message: "Unable to update quizzes right now.",
+        };
+    }
+}
+
+export async function deleteQuestion({
+    questionId,
+}: DeleteQuestionInput): Promise<DeleteQuestionState> {
+    const {isAuthenticated, userId} = await auth();
+
+    if (!isAuthenticated) {
+        return {
+            status: "error",
+            message: "You must be signed in to delete questions.",
+        };
+    }
+
+    if (!Number.isInteger(questionId)) {
+        return {
+            status: "error",
+            message: "Question not found.",
+        };
+    }
+
+    const [ownedQuestion] = await database
+        .select({id: questionTable.id})
+        .from(questionTable)
+        .where(and(
+            eq(questionTable.id, questionId),
+            eq(questionTable.ownerId, userId),
+        ))
+        .limit(1);
+
+    if (!ownedQuestion) {
+        return {
+            status: "error",
+            message: "Question not found or you do not have access to it.",
+        };
+    }
+
+    const [submittedAnswer] = await database
+        .select({id: userAnswerTable.id})
+        .from(userAnswerTable)
+        .where(eq(userAnswerTable.questionId, questionId))
+        .limit(1);
+
+    if (submittedAnswer) {
+        return {
+            status: "error",
+            message: "This question has submitted answers and cannot be deleted.",
+        };
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .delete(questionConceptRatingTable)
+                .where(eq(questionConceptRatingTable.questionId, questionId));
+
+            await tx
+                .delete(quizQuestion)
+                .where(eq(quizQuestion.questionId, questionId));
+
+            await tx
+                .delete(questionConcepts)
+                .where(eq(questionConcepts.questionId, questionId));
+
+            await tx
+                .delete(questionOptionTable)
+                .where(eq(questionOptionTable.questionId, questionId));
+
+            await tx
+                .delete(questionTable)
+                .where(and(
+                    eq(questionTable.id, questionId),
+                    eq(questionTable.ownerId, userId),
+                ));
+        });
+
+        revalidatePath("/quiz");
+        revalidatePath("/quiz/self");
+
+        return {
+            status: "success",
+            message: "Question deleted.",
+        };
+    } catch {
+        return {
+            status: "error",
+            message: "Unable to delete the question right now.",
         };
     }
 }
