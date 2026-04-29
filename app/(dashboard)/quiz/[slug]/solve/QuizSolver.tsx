@@ -35,6 +35,11 @@ type SolverSource = {
     description: string | null;
 };
 
+type RatingSnapshot = {
+    userRating: number | null;
+    questionRating: number;
+};
+
 function slugifyQuestion(value: string) {
     return value
         .toLowerCase()
@@ -48,6 +53,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
     const queryClient = useQueryClient();
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
     const [checkedQuestions, setCheckedQuestions] = useState<Record<number, boolean>>({});
+    const [ratingSnapshots, setRatingSnapshots] = useState<Record<string, RatingSnapshot>>({});
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [isComplete, setIsComplete] = useState(false);
     const [hasProcessedInitialHash, setHasProcessedInitialHash] = useState(false);
@@ -188,6 +194,23 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
             return;
         }
 
+        setRatingSnapshots((prev) => {
+            const next = {...prev};
+
+            for (const rating of currentConceptRatings) {
+                const key = `${rating.questionId}-${rating.conceptId}`;
+
+                if (!next[key]) {
+                    next[key] = {
+                        userRating: rating.userRating,
+                        questionRating: rating.questionRating,
+                    };
+                }
+            }
+
+            return next;
+        });
+
         submitAnswerMutation.mutate({
             questionId: currentQuestion.questionId,
             optionId: Number.parseInt(selectedOptionId, 10),
@@ -227,6 +250,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
         setCurrentQuestionIndex(0);
         setSelectedOptions({});
         setCheckedQuestions({});
+        setRatingSnapshots({});
         setIsComplete(false);
     }
 
@@ -336,24 +360,6 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <QuestionBodyBlock body={currentQuestion.body} />
-                        {currentConceptRatings.length ? (
-                            <div className="grid gap-2 rounded-lg border border-border/70 bg-muted/30 p-3 sm:grid-cols-2">
-                                {currentConceptRatings.map((rating) => (
-                                    <div
-                                        key={`${rating.questionId}-${rating.conceptId}`}
-                                        className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm"
-                                    >
-                                        <span className="min-w-0 truncate font-medium text-foreground">
-                                            {rating.name}
-                                        </span>
-                                        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                                            <span>User {rating.userRating === null ? "-" : Math.round(rating.userRating)}</span>
-                                            <span>Question {Math.round(rating.questionRating)}</span>
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
                         <RadioGroup
                             value={selectedOptionId ?? ""}
                             onValueChange={(value) => {
@@ -415,6 +421,66 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                                 {currentQuestion.options.find((option) => String(option.id) === selectedOptionId)?.isCorrect
                                     ? "Correct."
                                     : "Incorrect. The correct answer is highlighted."}
+                            </div>
+                        ) : null}
+
+                        {isCurrentQuestionChecked && currentConceptRatings.length ? (
+                            <div
+                                className={cn(
+                                    "grid gap-2 rounded-lg border p-3 sm:grid-cols-2",
+                                    currentQuestion.options.find((option) => String(option.id) === selectedOptionId)?.isCorrect
+                                        ? "border-green-500/40 bg-green-500/10"
+                                        : "border-destructive/40 bg-destructive/10"
+                                )}
+                            >
+                                {currentConceptRatings.map((rating) => {
+                                    const snapshot = ratingSnapshots[`${rating.questionId}-${rating.conceptId}`];
+                                    const userDelta = snapshot?.userRating === null || rating.userRating === null || snapshot?.userRating === undefined
+                                        ? null
+                                        : rating.userRating - snapshot.userRating;
+                                    const questionDelta = snapshot
+                                        ? rating.questionRating - snapshot.questionRating
+                                        : null;
+
+                                    return (
+                                        <div
+                                            key={`${rating.questionId}-${rating.conceptId}`}
+                                            className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm"
+                                        >
+                                            <span className="min-w-0 truncate font-medium text-foreground">
+                                                {rating.name}
+                                            </span>
+                                            <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                                                <span>
+                                                    User {rating.userRating === null ? "-" : Math.round(rating.userRating)}
+                                                    {userDelta !== null && userDelta !== 0 ? (
+                                                        <span
+                                                            className={cn(
+                                                                "ml-1 font-medium",
+                                                                userDelta > 0 ? "text-green-700 dark:text-green-300" : "text-destructive"
+                                                            )}
+                                                        >
+                                                            {userDelta > 0 ? "+" : ""}{Math.round(userDelta)}
+                                                        </span>
+                                                    ) : null}
+                                                </span>
+                                                <span>
+                                                    Question {Math.round(rating.questionRating)}
+                                                    {questionDelta !== null && questionDelta !== 0 ? (
+                                                        <span
+                                                            className={cn(
+                                                                "ml-1 font-medium",
+                                                                questionDelta > 0 ? "text-green-700 dark:text-green-300" : "text-destructive"
+                                                            )}
+                                                        >
+                                                            {questionDelta > 0 ? "+" : ""}{Math.round(questionDelta)}
+                                                        </span>
+                                                    ) : null}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         ) : null}
 
