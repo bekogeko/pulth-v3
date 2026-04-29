@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import {useMemo, useState} from "react";
+import {useState} from "react";
 import {BookOpenText, ChevronRight, Sparkles} from "lucide-react";
 
-import {getAllTopicsWithConcepts} from "@/app/(dashboard)/quiz/quiz";
+import type {getAllTopicsWithConcepts} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Skeleton} from "@/components/ui/skeleton";
@@ -17,14 +17,6 @@ type TopicListProps = {
 
 export function TopicList({topics, isLoading}: TopicListProps) {
     const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
-
-    const selectedTopic = useMemo(() => {
-        if (!topics?.length) {
-            return undefined;
-        }
-
-        return topics.find((topic) => topic.id === selectedTopicId) ?? topics[0];
-    }, [selectedTopicId, topics]);
 
     if (isLoading) {
         return (
@@ -65,6 +57,8 @@ export function TopicList({topics, isLoading}: TopicListProps) {
         );
     }
 
+    const activeTopicId = selectedTopicId ?? topics[0].id;
+
     return (
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <Card className="border-border/70 shadow-sm">
@@ -76,12 +70,12 @@ export function TopicList({topics, isLoading}: TopicListProps) {
                     <div className="space-y-2">
                         {topics.map((topic) => {
                             const conceptCount = topic.concepts.length;
-                            const isSelected = topic.id === selectedTopic?.id;
+                            const isSelected = topic.id === activeTopicId;
 
                             return (
-                                <button
+                                <Link
                                     key={topic.id}
-                                    type="button"
+                                    href={`#topic-${topic.slug}`}
                                     onClick={() => setSelectedTopicId(topic.id)}
                                     className={cn(
                                         "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
@@ -98,63 +92,75 @@ export function TopicList({topics, isLoading}: TopicListProps) {
                                         </span>
                                     </span>
                                     <ChevronRight className={cn("size-4 shrink-0", isSelected && "text-primary")} />
-                                </button>
+                                </Link>
                             );
                         })}
                     </div>
                 </CardHeader>
             </Card>
 
-            <Card className="border-border/70 shadow-sm">
-                <CardHeader className="gap-2">
-                    <CardTitle className="text-xl leading-tight">{selectedTopic?.title}</CardTitle>
-                    <CardDescription className="text-sm leading-6">
-                        {selectedTopic?.description}
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                    {selectedTopic?.concepts.length ? (
-                        selectedTopic.concepts.map((concept) => {
-                            const questionCount = Number(concept.questionCount);
+            <div className="min-w-0">
+                {topics.map((topic) => {
+                    const isSelected = topic.id === activeTopicId;
 
-                            return (
-                                <div
-                                    key={concept.id}
-                                    className="grid gap-3 rounded-lg border border-border/70 bg-background px-4 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center"
-                                >
-                                    <div className="min-w-0 space-y-1">
-                                        <p className="truncate font-medium leading-6">{concept.name}</p>
-                                        <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
-                                            {concept.description || "No description provided."}
-                                        </p>
-                                    </div>
-                                    <div className="text-sm text-muted-foreground sm:text-right">
-                                        <span className="font-medium text-foreground">{questionCount}</span>
-                                        {" "}question{questionCount === 1 ? "" : "s"}
-                                    </div>
-                                    {questionCount > 0 ? (
-                                        <Button asChild size="sm" className="shrink-0">
-                                            <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
-                                                <Sparkles />
-                                                Solve
-                                            </Link>
-                                        </Button>
-                                    ) : (
-                                        <Button size="sm" className="shrink-0" disabled>
-                                            <Sparkles />
-                                            Solve
-                                        </Button>
-                                    )}
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <p className="rounded-lg border border-dashed border-border/80 px-4 py-3 text-sm text-muted-foreground">
-                            No concepts attached to this topic yet.
-                        </p>
-                    )}
-                </CardContent>
-            </Card>
+                    return (
+                        <Card
+                            key={topic.id}
+                            id={`topic-${topic.slug}`}
+                            className={cn("border-border/70 shadow-sm", !isSelected && "hidden")}
+                        >
+                            <CardHeader className="gap-2">
+                                <CardTitle className="text-xl leading-tight">{topic.title}</CardTitle>
+                                <CardDescription className="text-sm leading-6">
+                                    {topic.description}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                                {topic.concepts.length ? (
+                                    topic.concepts.map((concept) => {
+                                        const questionCount = Number(concept.questionCount);
+
+                                        return (
+                                            <div
+                                                key={concept.id}
+                                                className="grid gap-3 rounded-lg border border-border/70 bg-background px-4 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center"
+                                            >
+                                                <div className="min-w-0 space-y-1">
+                                                    <p className="truncate font-medium leading-6">{concept.name}</p>
+                                                    <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
+                                                        {concept.description || "No description provided."}
+                                                    </p>
+                                                </div>
+                                                <div className="text-sm text-muted-foreground sm:text-right">
+                                                    <span className="font-medium text-foreground">{questionCount}</span>
+                                                    {" "}question{questionCount === 1 ? "" : "s"}
+                                                </div>
+                                                {questionCount > 0 ? (
+                                                    <Button asChild size="sm" className="shrink-0">
+                                                        <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                                            <Sparkles />
+                                                            Solve
+                                                        </Link>
+                                                    </Button>
+                                                ) : (
+                                                    <Button size="sm" className="shrink-0" disabled>
+                                                        <Sparkles />
+                                                        Solve
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                ) : (
+                                    <p className="rounded-lg border border-dashed border-border/80 px-4 py-3 text-sm text-muted-foreground">
+                                        No concepts attached to this topic yet.
+                                    </p>
+                                )}
+                            </CardContent>
+                        </Card>
+                    );
+                })}
+            </div>
         </div>
     );
 }
