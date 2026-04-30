@@ -58,13 +58,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             ...staticRoutes,
             ...quizzes.map(({ slug }) => ({
                 url: route(`/quiz/${slug}/solve`),
-                lastModified: now,
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
             })),
             ...concepts.map(({ slug }) => ({
                 url: route(`/quiz/concepts/${slug}/solve`),
-                lastModified: now,
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
             })),
