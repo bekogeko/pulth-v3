@@ -2,7 +2,16 @@ import {getAllQuizzes, getAllTopicsWithConcepts} from "@/app/(dashboard)/quiz/qu
 import {QuizList} from "@/app/(dashboard)/quiz/QuizList";
 import {TopicList} from "@/app/(dashboard)/quiz/TopicList";
 
-export default async function Quiz() {
+type QuizPageProps = {
+    searchParams: Promise<{
+        topic?: string | string[];
+    }>;
+};
+
+export default async function Quiz({searchParams}: QuizPageProps) {
+    const {topic} = await searchParams;
+    const selectedTopicSlug = Array.isArray(topic) ? topic[0] : topic;
+
     const [quizzes, topics] = await Promise.all([
         getAllQuizzes(),
         getAllTopicsWithConcepts(),
@@ -27,7 +36,7 @@ export default async function Quiz() {
                         Browse topics and solve questions for one concept at a time.
                     </p>
                 </div>
-                <TopicList topics={topics} isLoading={false} />
+                <TopicList topics={topics} isLoading={false} selectedTopicSlug={selectedTopicSlug} />
             </div>
         </div>
     );

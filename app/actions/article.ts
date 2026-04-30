@@ -157,6 +157,60 @@ export async function getArticles() {
 }
 
 export async function getArticleBySlug(slug: string) {
+    type ConceptJson = {
+        id: number;
+        name: string;
+        slug: string;
+    };
+
+    type TopicJson = {
+        id: number;
+        title: string;
+        slug: string;
+    };
+
+    const conceptsSq = database
+        .select({
+            concepts: sql<ConceptJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${conceptTable.id},
+                            'name', ${conceptTable.name},
+                            'slug', ${conceptTable.slug}
+                        )
+                        order by ${conceptTable.name}
+                    ),
+                    '[]'::json
+                )
+            `.as("concepts"),
+        })
+        .from(articleConceptsTable)
+        .innerJoin(conceptTable, eq(articleConceptsTable.conceptId, conceptTable.id))
+        .where(eq(articleConceptsTable.articleId, articleTable.id))
+        .as("published_article_concepts_sq");
+
+    const topicsSq = database
+        .select({
+            topics: sql<TopicJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${topicTable.id},
+                            'title', ${topicTable.title},
+                            'slug', ${topicTable.slug}
+                        )
+                        order by ${topicTable.title}
+                    ),
+                    '[]'::json
+                )
+            `.as("topics"),
+        })
+        .from(articleTopicsTable)
+        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
+        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .as("published_article_topics_sq");
+
     const [article] = await database
         .select({
             id: articleTable.id,
@@ -167,12 +221,16 @@ export async function getArticleBySlug(slug: string) {
             publishedAt: articleTable.publishedAt,
             createdAt: articleTable.createdAt,
             updatedAt: articleTable.updatedAt,
+            concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
+            topics: sql<TopicJson[]>`coalesce(${topicsSq.topics}, '[]'::json)`,
         })
         .from(articleTable)
         .where(and(
             eq(articleTable.slug, slug),
             eq(articleTable.isPublished, true),
         ))
+        .leftJoinLateral(conceptsSq, sql`true`)
+        .leftJoinLateral(topicsSq, sql`true`)
         .limit(1);
 
     return article;

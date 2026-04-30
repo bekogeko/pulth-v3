@@ -65,6 +65,8 @@ export default async function ArticlePage({params}: ArticlePageProps) {
             title={article.title}
             description={article.description}
             body={article.body}
+            concepts={article.concepts}
+            topics={article.topics}
         />
     );
 }

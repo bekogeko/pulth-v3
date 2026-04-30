@@ -13,10 +13,11 @@ import {cn} from "@/lib/utils";
 type TopicListProps = {
     topics: Awaited<ReturnType<typeof getAllTopicsWithConcepts>> | undefined;
     isLoading: boolean;
+    selectedTopicSlug?: string;
 };
 
-export function TopicList({topics, isLoading}: TopicListProps) {
-    const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
+export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps) {
+    const [selectedTopicOverrideSlug, setSelectedTopicOverrideSlug] = useState<string | null>(null);
 
     if (isLoading) {
         return (
@@ -57,7 +58,10 @@ export function TopicList({topics, isLoading}: TopicListProps) {
         );
     }
 
-    const activeTopicId = selectedTopicId ?? topics[0].id;
+    const activeTopic = topics.find((topic) => topic.slug === selectedTopicSlug)
+        ?? topics.find((topic) => topic.slug === selectedTopicOverrideSlug)
+        ?? topics[0];
+    const activeTopicId = activeTopic.id;
 
     return (
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -75,8 +79,8 @@ export function TopicList({topics, isLoading}: TopicListProps) {
                             return (
                                 <Link
                                     key={topic.id}
-                                    href={`#topic-${topic.slug}`}
-                                    onClick={() => setSelectedTopicId(topic.id)}
+                                    href={`/quiz?topic=${encodeURIComponent(topic.slug)}`}
+                                    onClick={() => setSelectedTopicOverrideSlug(topic.slug)}
                                     className={cn(
                                         "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
                                         "hover:border-primary/40 hover:bg-primary/5",

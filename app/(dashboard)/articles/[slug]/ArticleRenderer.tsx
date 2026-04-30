@@ -1,7 +1,23 @@
 import type {ReactNode} from "react";
+import Link from "next/link";
+import {ArrowRight, BookOpenText, Sparkles} from "lucide-react";
+
 import InlineRenderer from "@/app/(dashboard)/articles/[slug]/InlineRenderer";
 import ListRenderer from "@/app/(dashboard)/articles/[slug]/ListRenderer";
+import {Button} from "@/components/ui/button";
 import type {Block, EditorJsOutput, EditorListItem} from "@/schemas/EditorTypes";
+
+type ArticleConcept = {
+    id: number;
+    name: string;
+    slug: string;
+};
+
+type ArticleTopic = {
+    id: number;
+    title: string;
+    slug: string;
+};
 
 function Header(props: { level: number; children: ReactNode }) {
     switch (props.level) {
@@ -68,10 +84,83 @@ function renderBlock(item: Block, index: number) {
     }
 }
 
+function RelatedQuizLinks(props: {
+    concepts: ArticleConcept[];
+    topics: ArticleTopic[];
+}) {
+    if (!props.concepts.length && !props.topics.length) {
+        return null;
+    }
+
+    return (
+        <aside className="mt-12 rounded-lg border border-border bg-card p-5 text-card-foreground">
+            <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <Sparkles className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-4">
+                    <div className="space-y-1">
+                        <h2 className="text-base font-semibold tracking-normal">Practice this article</h2>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            Use the related quiz paths below to solve questions connected to this article.
+                        </p>
+                    </div>
+
+                    {props.concepts.length > 0 ? (
+                        <div className="space-y-2">
+                            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                Concepts
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                                {props.concepts.map((concept) => (
+                                    <Button key={concept.id} asChild size="sm">
+                                        <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                            <Sparkles />
+                                            {concept.name}
+                                        </Link>
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {props.topics.length > 0 ? (
+                        <div className="space-y-2">
+                            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                                Topics
+                            </h3>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {props.topics.map((topic) => (
+                                    <Link
+                                        key={topic.id}
+                                        href={`/quiz?topic=${encodeURIComponent(topic.slug)}`}
+                                        className="group flex items-center justify-between gap-3 rounded-md border border-border/80 px-3 py-2 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/5"
+                                    >
+                                        <span className="flex min-w-0 items-center gap-2">
+                                            <BookOpenText className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+                                            <span className="truncate">{topic.title}</span>
+                                        </span>
+                                        <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                                    </Link>
+                                ))}
+                            </div>
+                            <p className="text-xs leading-5 text-muted-foreground">
+                                Topic links open the selected quiz topic so you can choose a concept to solve.
+                            </p>
+                        </div>
+                    ) : null}
+                </div>
+            </div>
+        </aside>
+    );
+}
+
 export default function ArticleRenderer(props: {
     title: string;
     description: string;
     body: EditorJsOutput;
+    concepts: ArticleConcept[];
+    topics: ArticleTopic[];
 }) {
     return (
         <article className="mx-auto max-w-2xl px-4 py-12">
@@ -83,6 +172,8 @@ export default function ArticleRenderer(props: {
             <div>
                 {props.body.blocks.map(renderBlock)}
             </div>
+
+            <RelatedQuizLinks concepts={props.concepts} topics={props.topics} />
         </article>
     );
 }
