@@ -33,6 +33,14 @@ export type EditorListBlock = {
     };
 };
 
+export type EditorCodeBlock = {
+    id?: string;
+    type: "code";
+    data: {
+        code: string;
+    };
+};
+
 export type EditorUnknownBlock = {
     id?: string;
     type: string;
@@ -40,7 +48,7 @@ export type EditorUnknownBlock = {
     tunes?: Record<string, unknown>;
 };
 
-export type KnownBlock = EditorHeaderBlock | EditorParagraphBlock | EditorListBlock;
+export type KnownBlock = EditorHeaderBlock | EditorParagraphBlock | EditorListBlock | EditorCodeBlock;
 export type Block = EditorUnknownBlock;
 
 export type EditorJsOutput = {

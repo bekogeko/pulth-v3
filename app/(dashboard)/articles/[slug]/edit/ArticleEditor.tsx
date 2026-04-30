@@ -53,10 +53,18 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
         let isMounted = true;
 
         async function mountEditor() {
-            const [{default: Editor}, {default: Header}, {default: List}] = await Promise.all([
+            const [
+                {default: Editor},
+                {default: Header},
+                {default: List},
+                {default: Code},
+                {default: InlineCode},
+            ] = await Promise.all([
                 import("@editorjs/editorjs"),
                 import("@editorjs/header"),
                 import("@editorjs/list"),
+                import("@editorjs/code"),
+                import("@editorjs/inline-code"),
             ]);
 
             if (!isMounted || editorRef.current) {
@@ -71,14 +79,27 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                 tools: {
                     header: {
                         class: Header as unknown as ToolConstructable,
+                        inlineToolbar: true,
                         config: {
                             levels: [2, 3, 4],
                             defaultLevel: 2,
                         },
                     },
+                    paragraph: {
+                        inlineToolbar: true,
+                    },
                     list: {
                         class: List as unknown as ToolConstructable,
                         inlineToolbar: true,
+                    },
+                    code: {
+                        class: Code as unknown as ToolConstructable,
+                        config: {
+                            placeholder: "Paste or type code...",
+                        },
+                    },
+                    inlineCode: {
+                        class: InlineCode as unknown as ToolConstructable,
                     },
                 },
             });

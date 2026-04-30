@@ -51,6 +51,14 @@ function renderBlock(item: Block, index: number) {
                     />
                 </div>
             );
+        case "code":
+            const code = typeof item.data.code === "string" ? item.data.code : "";
+
+            return (
+                <pre key={key} className="my-5 overflow-x-auto rounded-md bg-muted p-4 text-sm leading-6 text-foreground">
+                    <code>{code}</code>
+                </pre>
+            );
         default:
             return (
                 <pre className="my-5 overflow-x-auto rounded-md bg-destructive/10 p-4 text-sm text-destructive" key={key}>

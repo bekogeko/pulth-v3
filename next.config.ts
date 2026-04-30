@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
     "@editorjs/editorjs",
     "@editorjs/header",
     "@editorjs/list",
+    "@editorjs/code",
+    "@editorjs/inline-code",
   ],
 };
 
