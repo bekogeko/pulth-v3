@@ -17,7 +17,14 @@ type TopicListProps = {
 };
 
 export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps) {
-    const [selectedTopicOverrideSlug, setSelectedTopicOverrideSlug] = useState<string | null>(null);
+    const [selectedTopicOverrideSlug, setSelectedTopicOverrideSlug] = useState<string | null>(selectedTopicSlug ?? null);
+
+    function selectTopic(slug: string) {
+        const params = new URLSearchParams(window.location.search);
+        params.set("topic", slug);
+        window.history.pushState(null, "", `/quiz?${params.toString()}`);
+        setSelectedTopicOverrideSlug(slug);
+    }
 
     if (isLoading) {
         return (
@@ -58,8 +65,8 @@ export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps
         );
     }
 
-    const activeTopic = topics.find((topic) => topic.slug === selectedTopicSlug)
-        ?? topics.find((topic) => topic.slug === selectedTopicOverrideSlug)
+    const activeTopic = topics.find((topic) => topic.slug === selectedTopicOverrideSlug)
+        ?? topics.find((topic) => topic.slug === selectedTopicSlug)
         ?? topics[0];
     const activeTopicId = activeTopic.id;
 
@@ -77,10 +84,10 @@ export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps
                             const isSelected = topic.id === activeTopicId;
 
                             return (
-                                <Link
+                                <button
                                     key={topic.id}
-                                    href={`/quiz?topic=${encodeURIComponent(topic.slug)}`}
-                                    onClick={() => setSelectedTopicOverrideSlug(topic.slug)}
+                                    type="button"
+                                    onClick={() => selectTopic(topic.slug)}
                                     className={cn(
                                         "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
                                         "hover:border-primary/40 hover:bg-primary/5",
@@ -96,7 +103,7 @@ export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps
                                         </span>
                                     </span>
                                     <ChevronRight className={cn("size-4 shrink-0", isSelected && "text-primary")} />
-                                </Link>
+                                </button>
                             );
                         })}
                     </div>
