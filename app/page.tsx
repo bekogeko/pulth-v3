@@ -215,9 +215,14 @@ export default function Home() {
       <footer className="border-t border-border bg-background">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <p>© 2026 Pulth</p>
-          <Link href="/privacy" className="font-medium transition-colors hover:text-foreground">
-            Privacy Policy
-          </Link>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <Link href="/privacy" className="font-medium transition-colors hover:text-foreground">
+              Privacy Policy
+            </Link>
+            <Link href="/terms-of-service" className="font-medium transition-colors hover:text-foreground">
+              Terms of Service
+            </Link>
+          </div>
         </div>
       </footer>
     </main>

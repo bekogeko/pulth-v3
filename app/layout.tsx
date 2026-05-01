@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Pulth",
-  description: "Learn by questioning",
+  description: "Pulth is a Independent Learning Web Application. This is achieved by various techniques trough out the app. Quizzes and Article",
 };
 
 export default function RootLayout({
