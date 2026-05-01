@@ -1,5 +1,7 @@
 import Link from "next/link";
-import {ArrowUpRight, CircleHelp, ClipboardList, Trophy} from "lucide-react";
+import {ArrowUpRight, CircleHelp, ClipboardList, LogIn, Trophy} from "lucide-react";
+import {SignInButton} from "@clerk/nextjs";
+import {auth} from "@clerk/nextjs/server";
 
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
@@ -39,7 +41,9 @@ const faqs = [
     },
 ];
 
-export default function FaqPage() {
+export default async function FaqPage() {
+    const {isAuthenticated} = await auth();
+
     return (
         <div className="flex min-w-0 flex-1 flex-col gap-6 p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -66,6 +70,14 @@ export default function FaqPage() {
                             Practice
                         </Link>
                     </Button>
+                    {!isAuthenticated ? (
+                        <SignInButton>
+                            <Button type="button" variant="outline" size="lg">
+                                <LogIn className="size-4" />
+                                Sign in
+                            </Button>
+                        </SignInButton>
+                    ) : null}
                 </div>
             </div>
 
@@ -103,12 +115,21 @@ export default function FaqPage() {
                                 <ArrowUpRight className="size-4" />
                             </Link>
                         </Button>
-                        <Button asChild variant="outline" className="w-full justify-between">
-                            <Link href="/ranking/self">
-                                My ranks
-                                <ArrowUpRight className="size-4" />
-                            </Link>
-                        </Button>
+                        {isAuthenticated ? (
+                            <Button asChild variant="outline" className="w-full justify-between">
+                                <Link href="/ranking/self">
+                                    My ranks
+                                    <ArrowUpRight className="size-4" />
+                                </Link>
+                            </Button>
+                        ) : (
+                            <SignInButton>
+                                <Button type="button" variant="outline" className="w-full justify-between">
+                                    Sign in for my ranks
+                                    <LogIn className="size-4" />
+                                </Button>
+                            </SignInButton>
+                        )}
                     </CardContent>
                 </Card>
             </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {PencilLine, Sparkles, Workflow} from "lucide-react";
+import {Sparkles, Workflow} from "lucide-react";
 
 import type {getAllQuizzes} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
@@ -97,12 +97,6 @@ export function QuizList({quizzes, isLoading}: QuizListProps) {
                         </CardHeader>
 
                         <CardContent className="flex gap-2 pt-0">
-                            <Button asChild variant="outline" size="lg" className="flex-1">
-                                <Link href={`/quiz/${item.slug}/edit`} prefetch={false}>
-                                    <PencilLine />
-                                    Edit
-                                </Link>
-                            </Button>
                             <Button asChild size="lg" className="flex-1">
                                 <Link href={`/quiz/${item.slug}/solve`} prefetch={false}>
                                     <Sparkles />
