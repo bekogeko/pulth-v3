@@ -5,6 +5,8 @@ import {ArrowRight, BookOpenText} from "lucide-react";
 import {getArticles} from "@/app/actions/article";
 import {Button} from "@/components/ui/button";
 
+export const revalidate = false;
+
 export const metadata: Metadata = {
     title: "Articles",
     description: "Read published Pulth articles.",

@@ -1,15 +1,26 @@
 import type {Metadata} from "next";
 import {notFound} from "next/navigation";
 
-import {getArticleBySlug} from "@/app/actions/article";
+import {getArticleBySlug, getPublishedArticleSlugs} from "@/app/actions/article";
 import ArticleRenderer from "@/app/(dashboard)/articles/[slug]/ArticleRenderer";
 import {getAbsoluteUrl} from "@/lib/site-url";
+
+export const revalidate = false;
+export const dynamicParams = true;
 
 type ArticlePageProps = {
     params: Promise<{
         slug: string;
     }>;
 };
+
+export async function generateStaticParams() {
+    const articles = await getPublishedArticleSlugs();
+
+    return articles.map((article) => ({
+        slug: article.slug,
+    }));
+}
 
 export async function generateMetadata({params}: ArticlePageProps): Promise<Metadata> {
     const {slug} = await params;
