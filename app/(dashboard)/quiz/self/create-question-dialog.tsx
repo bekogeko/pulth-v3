@@ -1,11 +1,11 @@
 "use client";
 
-import {useActionState, useDeferredValue, useEffect, useState} from "react";
+import {useActionState, useDeferredValue, useEffect, useMemo, useState} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
-import {Plus, Trash2} from "lucide-react";
+import {Loader2, Plus, Search, Trash2} from "lucide-react";
 import {toast} from "sonner";
 
-import {createQuestion, getAllConcepts, getAllQuizzes} from "@/app/(dashboard)/quiz/quiz";
+import {createQuestion, getAllConcepts, getAllQuizzes, getSimilarQuestions} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {
     Dialog,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
+import {Skeleton} from "@/components/ui/skeleton";
 import {Textarea} from "@/components/ui/textarea";
 
 type CreateQuestionDialogProps = {
@@ -35,6 +36,8 @@ export function CreateQuestionDialog({
     const queryClient = useQueryClient();
     const [state, formAction, pending] = useActionState(createQuestion, INITIAL_STATE);
     const [options, setOptions] = useState<string[]>(INITIAL_OPTIONS);
+    const [prompt, setPrompt] = useState("");
+    const [body, setBody] = useState("");
     const [correctIndex, setCorrectIndex] = useState(0);
     const [conceptQuery, setConceptQuery] = useState("");
     const [quizQuery, setQuizQuery] = useState("");
@@ -42,6 +45,14 @@ export function CreateQuestionDialog({
     const [selectedQuizIds, setSelectedQuizIds] = useState<number[]>([]);
     const deferredConceptQuery = useDeferredValue(conceptQuery);
     const deferredQuizQuery = useDeferredValue(quizQuery);
+    const deferredPrompt = useDeferredValue(prompt);
+    const deferredBody = useDeferredValue(body);
+    const deferredOptions = useDeferredValue(options);
+    const similarQuestionInput = useMemo(() => ({
+        prompt: deferredPrompt,
+        body: deferredBody,
+        options: deferredOptions,
+    }), [deferredBody, deferredOptions, deferredPrompt]);
 
     const {data: concepts, isLoading: conceptsLoading} = useQuery({
         queryKey: ["concepts"],
@@ -53,6 +64,22 @@ export function CreateQuestionDialog({
         queryKey: ["quizzes"],
         queryFn: getAllQuizzes,
         enabled: open,
+    });
+
+    const normalizedSimilaritySearch = [
+        deferredPrompt,
+        deferredBody,
+        ...deferredOptions,
+    ].join(" ").trim();
+    const shouldCheckSimilarQuestions = open && normalizedSimilaritySearch.length >= 8;
+    const {
+        data: similarQuestions,
+        isFetching: similarQuestionsFetching,
+    } = useQuery({
+        queryKey: ["questions", "similar", similarQuestionInput],
+        queryFn: () => getSimilarQuestions(similarQuestionInput),
+        enabled: shouldCheckSimilarQuestions,
+        staleTime: 30_000,
     });
 
     useEffect(() => {
@@ -171,6 +198,8 @@ export function CreateQuestionDialog({
                                     <Input
                                         id="question-prompt"
                                         name="prompt"
+                                        value={prompt}
+                                        onChange={(event) => setPrompt(event.target.value)}
                                         placeholder="e.g. What is polymorphism?"
                                         required
                                         maxLength={255}
@@ -182,6 +211,8 @@ export function CreateQuestionDialog({
                                     <Textarea
                                         id="question-body"
                                         name="body"
+                                        value={body}
+                                        onChange={(event) => setBody(event.target.value)}
                                         placeholder="Optional supporting context, snippet, or note."
                                         maxLength={1024}
                                         rows={6}
@@ -190,6 +221,12 @@ export function CreateQuestionDialog({
                                         Optional. Up to 1024 characters.
                                     </p>
                                 </div>
+
+                                <SimilarQuestionsPanel
+                                    enabled={shouldCheckSimilarQuestions}
+                                    isFetching={similarQuestionsFetching}
+                                    questions={similarQuestions ?? []}
+                                />
                             </section>
 
                             <section className="space-y-4 rounded-xl border border-border/70 bg-muted/10 p-4">
@@ -384,5 +421,136 @@ export function CreateQuestionDialog({
                 </form>
             </DialogContent>
         </Dialog>
+    );
+}
+
+type SimilarQuestionsPanelProps = {
+    enabled: boolean;
+    isFetching: boolean;
+    questions: Awaited<ReturnType<typeof getSimilarQuestions>>;
+};
+
+function SimilarQuestionsPanel({
+    enabled,
+    isFetching,
+    questions,
+}: SimilarQuestionsPanelProps) {
+    if (!enabled) {
+        return (
+            <div className="rounded-md border border-dashed border-border/70 bg-background/40 px-3 py-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                    <Search className="size-4 text-muted-foreground" />
+                    Similar questions
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    Type at least 8 characters to check your existing questions before saving.
+                </p>
+            </div>
+        );
+    }
+
+    if (isFetching && questions.length === 0) {
+        return (
+            <div className="rounded-md border border-border/70 bg-background/40 px-3 py-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    Checking similar questions
+                </div>
+                <div className="mt-3 space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                </div>
+            </div>
+        );
+    }
+
+    if (questions.length === 0) {
+        return (
+            <div className="rounded-md border border-border/70 bg-background/40 px-3 py-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                        <Search className="size-4 text-muted-foreground" />
+                        Similar questions
+                    </div>
+                    {isFetching ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    No close matches found.
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-md border border-border/70 bg-background/40 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                    <Search className="size-4 text-muted-foreground" />
+                    Similar questions
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {questions.length} match{questions.length === 1 ? "" : "es"}
+                </div>
+            </div>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+                {questions.map((question) => {
+                    const correctOption = question.options.find((option) => option.isCorrect);
+                    const similarOptions = question.options
+                        .filter((option) => Number(option.score ?? 0) >= 18)
+                        .sort((leftOption, rightOption) => Number(rightOption.score ?? 0) - Number(leftOption.score ?? 0))
+                        .slice(0, 3);
+                    const quizTitles = question.quizzes.map((quiz) => quiz.title).join(", ");
+
+                    return (
+                        <div key={question.id} className="rounded-md border border-border/70 bg-background px-3 py-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+                                    {question.score}% similar
+                                </span>
+                                {quizTitles ? (
+                                    <span className="min-w-0 truncate text-[0.7rem] text-muted-foreground">
+                                        {quizTitles}
+                                    </span>
+                                ) : null}
+                            </div>
+                            <p className="mt-1 text-sm font-medium text-foreground">
+                                {question.question}
+                            </p>
+                            {question.body ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                    {question.body}
+                                </p>
+                            ) : null}
+                            {similarOptions.length ? (
+                                <div className="mt-2 space-y-1">
+                                    <p className="text-xs font-medium text-muted-foreground">Similar options</p>
+                                    {similarOptions.map((option) => (
+                                        <div
+                                            key={option.id}
+                                            className="flex items-start justify-between gap-2 rounded-sm bg-muted/60 px-2 py-1 text-xs"
+                                        >
+                                            <span className="min-w-0 text-foreground">
+                                                {option.option}
+                                                {option.isCorrect ? (
+                                                    <span className="ml-1 text-muted-foreground">(correct)</span>
+                                                ) : (
+                                                    <span className="ml-1 text-muted-foreground">(incorrect)</span>
+                                                )}
+                                            </span>
+                                            <span className="shrink-0 text-muted-foreground">{option.score}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : correctOption ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                    Correct: <span className="text-foreground">{correctOption.option}</span>
+                                </p>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
     );
 }

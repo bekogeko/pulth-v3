@@ -120,6 +120,13 @@
       "when": 1777398321300,
       "tag": "0016_minor_psynapse",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778496000000,
+      "tag": "0017_enable_pg_trgm",
+      "breakpoints": true
     }
   ]
 }

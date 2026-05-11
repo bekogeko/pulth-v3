@@ -76,6 +76,23 @@ type SubmitAnswerState = {
     wasCorrect?: boolean;
 };
 
+export type SimilarQuestionResult = {
+    id: number;
+    question: string;
+    body: string | null;
+    options: {
+        id: number;
+        option: string;
+        isCorrect: boolean;
+        score?: number;
+    }[];
+    quizzes: {
+        id: number;
+        title: string;
+    }[];
+    score: number;
+};
+
 export type QuestionConceptRating = {
     questionId: number;
     conceptId: number;
@@ -86,6 +103,41 @@ export type QuestionConceptRating = {
 
 const DEFAULT_CONCEPT_RATING = 1000;
 const RATING_K_FACTOR = 32;
+
+const MIN_SIMILARITY_QUERY_LENGTH = 8;
+const SIMILAR_QUESTION_LIMIT = 8;
+const SIMILAR_QUESTION_THRESHOLD = 0.18;
+let pgTrgmSchema: string | null | undefined;
+
+function normalizeComparableText(value: string) {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function quoteSqlIdentifier(identifier: string) {
+    return `"${identifier.replaceAll("\"", "\"\"")}"`;
+}
+
+async function getPgTrgmSchema() {
+    if (pgTrgmSchema !== undefined) {
+        return pgTrgmSchema;
+    }
+
+    const result = await database.execute<{schema: string}>(sql`
+        select n.nspname as schema
+        from pg_proc p
+        inner join pg_namespace n on n.oid = p.pronamespace
+        where p.proname = 'similarity'
+          and pg_get_function_identity_arguments(p.oid) = 'text, text'
+        limit 1
+    `);
+
+    pgTrgmSchema = result.rows[0]?.schema ?? null;
+    return pgTrgmSchema;
+}
 
 function calculateRatingChange(userRating: number, questionRating: number, wasCorrect: boolean) {
     const expectedUserScore = 1 / (1 + 10 ** ((questionRating - userRating) / 400));
@@ -121,6 +173,143 @@ export async function getAllConcepts() {
         })
         .from(conceptTable)
         .orderBy(asc(conceptTable.name));
+}
+
+export async function getSimilarQuestions(input: {
+    prompt: string;
+    body?: string;
+    options?: string[];
+}): Promise<SimilarQuestionResult[]> {
+    const prompt = input.prompt.trim();
+    const body = input.body?.trim() ?? "";
+    const options = input.options?.map((option) => option.trim()).filter(Boolean) ?? [];
+    const searchText = [prompt, body, ...options].filter(Boolean).join(" ");
+
+    const {isAuthenticated} = await auth();
+
+    if (!isAuthenticated || normalizeComparableText(searchText).length < MIN_SIMILARITY_QUERY_LENGTH) {
+        return [];
+    }
+
+    const searchQuery = normalizeComparableText(searchText);
+    const trigramSchema = await getPgTrgmSchema();
+
+    if (!trigramSchema) {
+        return [];
+    }
+
+    const trigramSchemaIdentifier = quoteSqlIdentifier(trigramSchema);
+    const similarityFunction = sql.raw(`${trigramSchemaIdentifier}.similarity`);
+    const wordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.word_similarity`);
+    const strictWordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.strict_word_similarity`);
+
+    type SimilarQuestionRow = {
+        id: number;
+        question: string;
+        body: string | null;
+        options: SimilarQuestionResult["options"];
+        quizzes: SimilarQuestionResult["quizzes"];
+        score: number;
+    };
+
+    const result = await database.execute<SimilarQuestionRow>(sql`
+        with question_text as (
+            select
+                q.id,
+                q.question,
+                q.body,
+                lower(q.question) as question_text,
+                lower(coalesce(q.body, '')) as body_text,
+                lower(coalesce(string_agg(distinct qo.option, ' '), '')) as option_text,
+                lower(concat_ws(
+                    ' ',
+                    q.question,
+                    q.body,
+                    coalesce(string_agg(distinct qo.option, ' '), '')
+                )) as search_text
+            from questions q
+            left join question_options qo on qo."questionId" = q.id
+            group by q.id
+        ),
+        ranked_questions as (
+            select
+                id,
+                question,
+                body,
+                greatest(
+                    ${similarityFunction}(question_text, ${searchQuery}::text),
+                    ${wordSimilarityFunction}(${searchQuery}::text, question_text),
+                    ${strictWordSimilarityFunction}(${searchQuery}::text, question_text),
+                    ${similarityFunction}(body_text, ${searchQuery}::text),
+                    ${wordSimilarityFunction}(${searchQuery}::text, body_text),
+                    ${similarityFunction}(option_text, ${searchQuery}::text),
+                    ${wordSimilarityFunction}(${searchQuery}::text, option_text),
+                    ${similarityFunction}(search_text, ${searchQuery}::text),
+                    ${wordSimilarityFunction}(${searchQuery}::text, search_text),
+                    ${strictWordSimilarityFunction}(${searchQuery}::text, search_text)
+                ) as similarity_score
+            from question_text
+        )
+        select
+            rq.id,
+            rq.question,
+            rq.body,
+            coalesce(
+                (
+                    select json_agg(
+                        json_build_object(
+                            'id', qo.id,
+                            'option', qo.option,
+                            'isCorrect', qo."isCorrect",
+                            'score', least(100, round(
+                                greatest(
+                                    ${similarityFunction}(lower(qo.option), ${searchQuery}::text),
+                                    ${wordSimilarityFunction}(${searchQuery}::text, lower(qo.option)),
+                                    ${strictWordSimilarityFunction}(${searchQuery}::text, lower(qo.option))
+                                ) * 100
+                            )::int)
+                        )
+                        order by greatest(
+                            ${similarityFunction}(lower(qo.option), ${searchQuery}::text),
+                            ${wordSimilarityFunction}(${searchQuery}::text, lower(qo.option)),
+                            ${strictWordSimilarityFunction}(${searchQuery}::text, lower(qo.option))
+                        ) desc, qo.id
+                    )
+                    from question_options qo
+                    where qo."questionId" = rq.id
+                ),
+                '[]'::json
+            ) as options,
+            coalesce(
+                (
+                    select json_agg(
+                        json_build_object(
+                            'id', qz.id,
+                            'title', qz.title
+                        )
+                        order by qz.id
+                    )
+                    from quiz_questions qq
+                    inner join quizzes qz on qz.id = qq."quizId"
+                    where qq."questionId" = rq.id
+                ),
+                '[]'::json
+            ) as quizzes,
+            least(100, round(rq.similarity_score * 100)::int) as score
+        from ranked_questions rq
+        where rq.similarity_score >= ${SIMILAR_QUESTION_THRESHOLD}
+        order by rq.similarity_score desc, rq.id asc
+        limit ${SIMILAR_QUESTION_LIMIT}
+    `);
+
+    return result.rows.map((row) => ({
+        id: Number(row.id),
+        question: row.question,
+        body: row.body,
+        options: Array.isArray(row.options) ? row.options : [],
+        quizzes: Array.isArray(row.quizzes) ? row.quizzes : [],
+        score: Number(row.score),
+    }));
 }
 
 export async function getAllTopicsWithConcepts() {
