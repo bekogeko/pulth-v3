@@ -156,6 +156,15 @@ export async function getArticles() {
         .orderBy(desc(articleTable.publishedAt), desc(articleTable.createdAt));
 }
 
+export async function getPublishedArticleSlugs() {
+    return database
+        .select({
+            slug: articleTable.slug,
+        })
+        .from(articleTable)
+        .where(eq(articleTable.isPublished, true));
+}
+
 export async function getArticleBySlug(slug: string) {
     type ConceptJson = {
         id: number;
