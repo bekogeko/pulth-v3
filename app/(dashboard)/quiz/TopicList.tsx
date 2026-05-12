@@ -14,9 +14,17 @@ type TopicListProps = {
     topics: Awaited<ReturnType<typeof getAllTopicsWithConcepts>> | undefined;
     isLoading: boolean;
     selectedTopicSlug?: string;
+    showActiveTopicHeader?: boolean;
+    showSelectedTopicHeading?: boolean;
 };
 
-export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps) {
+export function TopicList({
+    topics,
+    isLoading,
+    selectedTopicSlug,
+    showActiveTopicHeader = true,
+    showSelectedTopicHeading = false,
+}: TopicListProps) {
     const [selectedTopicOverrideSlug, setSelectedTopicOverrideSlug] = useState<string | null>(selectedTopicSlug ?? null);
 
     function selectTopic(slug: string) {
@@ -71,106 +79,126 @@ export function TopicList({topics, isLoading, selectedTopicSlug}: TopicListProps
     const activeTopicId = activeTopic.id;
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-            <Card className="border-border/70 shadow-sm">
-                <CardHeader className="gap-3">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                        <BookOpenText className="size-4" />
-                        Topics
+        <div className="space-y-4">
+            {showSelectedTopicHeading ? (
+                <div className="border-b border-border pb-5">
+                    <div className="max-w-2xl space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            Topic practice
+                        </p>
+                        <h1 id="selected-topic-practice-heading" className="text-2xl font-semibold tracking-tight">
+                            {activeTopic.title} Quiz Practice
+                        </h1>
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            {activeTopic.description}
+                        </p>
                     </div>
-                    <div className="space-y-2">
-                        {topics.map((topic) => {
-                            const conceptCount = topic.concepts.length;
-                            const isSelected = topic.id === activeTopicId;
+                </div>
+            ) : null}
 
-                            return (
-                                <button
-                                    key={topic.id}
-                                    type="button"
-                                    onClick={() => selectTopic(topic.slug)}
-                                    className={cn(
-                                        "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-                                        "hover:border-primary/40 hover:bg-primary/5",
-                                        isSelected
-                                            ? "border-primary/50 bg-primary/8 text-foreground"
-                                            : "border-transparent bg-transparent text-muted-foreground"
-                                    )}
-                                >
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-sm font-medium">{topic.title}</span>
-                                        <span className="block text-xs">
-                                            {conceptCount} concept{conceptCount === 1 ? "" : "s"}
+            <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+                <Card className="border-border/70 shadow-sm">
+                    <CardHeader className="gap-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                            <BookOpenText className="size-4" />
+                            Topics
+                        </div>
+                        <div className="space-y-2">
+                            {topics.map((topic) => {
+                                const conceptCount = topic.concepts.length;
+                                const isSelected = topic.id === activeTopicId;
+
+                                return (
+                                    <button
+                                        key={topic.id}
+                                        type="button"
+                                        onClick={() => selectTopic(topic.slug)}
+                                        className={cn(
+                                            "flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                                            "hover:border-primary/40 hover:bg-primary/5",
+                                            isSelected
+                                                ? "border-primary/50 bg-primary/8 text-foreground"
+                                                : "border-transparent bg-transparent text-muted-foreground"
+                                        )}
+                                    >
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-sm font-medium">{topic.title}</span>
+                                            <span className="block text-xs">
+                                                {conceptCount} concept{conceptCount === 1 ? "" : "s"}
+                                            </span>
                                         </span>
-                                    </span>
-                                    <ChevronRight className={cn("size-4 shrink-0", isSelected && "text-primary")} />
-                                </button>
-                            );
-                        })}
-                    </div>
-                </CardHeader>
-            </Card>
+                                        <ChevronRight className={cn("size-4 shrink-0", isSelected && "text-primary")} />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </CardHeader>
+                </Card>
 
-            <div className="min-w-0">
-                {topics.map((topic) => {
-                    const isSelected = topic.id === activeTopicId;
+                <div className="min-w-0">
+                    {topics.map((topic) => {
+                        const isSelected = topic.id === activeTopicId;
 
-                    return (
-                        <Card
-                            key={topic.id}
-                            id={`topic-${topic.slug}`}
-                            className={cn("border-border/70 shadow-sm", !isSelected && "hidden")}
-                        >
-                            <CardHeader className="gap-2">
-                                <CardTitle className="text-xl leading-tight">{topic.title}</CardTitle>
-                                <CardDescription className="text-sm leading-6">
-                                    {topic.description}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-2">
-                                {topic.concepts.length ? (
-                                    topic.concepts.map((concept) => {
-                                        const questionCount = Number(concept.questionCount);
+                        return (
+                            <Card
+                                key={topic.id}
+                                id={`topic-${topic.slug}`}
+                                className={cn("border-border/70 shadow-sm", !isSelected && "hidden")}
+                            >
+                                {showActiveTopicHeader ? (
+                                    <CardHeader className="gap-2">
+                                        <CardTitle className="text-xl leading-tight">{topic.title}</CardTitle>
+                                        <CardDescription className="text-sm leading-6">
+                                            {topic.description}
+                                        </CardDescription>
+                                    </CardHeader>
+                                ) : null}
+                                <CardContent className={cn("space-y-2", !showActiveTopicHeader && "pt-6")}>
+                                    {topic.concepts.length ? (
+                                        topic.concepts.map((concept) => {
+                                            const questionCount = Number(concept.questionCount);
 
-                                        return (
-                                            <div
-                                                key={concept.id}
-                                                className="grid gap-3 rounded-lg border border-border/70 bg-background px-4 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center"
-                                            >
-                                                <div className="min-w-0 space-y-1">
-                                                    <p className="truncate font-medium leading-6">{concept.name}</p>
-                                                    <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
-                                                        {concept.description || "No description provided."}
-                                                    </p>
-                                                </div>
-                                                <div className="text-sm text-muted-foreground sm:text-right">
-                                                    <span className="font-medium text-foreground">{questionCount}</span>
-                                                    {" "}question{questionCount === 1 ? "" : "s"}
-                                                </div>
-                                                {questionCount > 0 ? (
-                                                    <Button asChild size="sm" className="shrink-0">
-                                                        <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                            return (
+                                                <div
+                                                    key={concept.id}
+                                                    className="grid gap-3 rounded-lg border border-border/70 bg-background px-4 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_auto] sm:items-center"
+                                                >
+                                                    <div className="min-w-0 space-y-1">
+                                                        <p className="truncate font-medium leading-6">{concept.name}</p>
+                                                        <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
+                                                            {concept.description || "No description provided."}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-sm text-muted-foreground sm:text-right">
+                                                        <span className="font-medium text-foreground">{questionCount}</span>
+                                                        {" "}question{questionCount === 1 ? "" : "s"}
+                                                    </div>
+                                                    {questionCount > 0 ? (
+                                                        <Button asChild size="sm" className="shrink-0">
+                                                            <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                                                <Sparkles />
+                                                                Solve
+                                                            </Link>
+                                                        </Button>
+                                                    ) : (
+                                                        <Button size="sm" className="shrink-0" disabled>
                                                             <Sparkles />
                                                             Solve
-                                                        </Link>
-                                                    </Button>
-                                                ) : (
-                                                    <Button size="sm" className="shrink-0" disabled>
-                                                        <Sparkles />
-                                                        Solve
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <p className="rounded-lg border border-dashed border-border/80 px-4 py-3 text-sm text-muted-foreground">
-                                        No concepts attached to this topic yet.
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    );
-                })}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="rounded-lg border border-dashed border-border/80 px-4 py-3 text-sm text-muted-foreground">
+                                            No concepts attached to this topic yet.
+                                        </p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );

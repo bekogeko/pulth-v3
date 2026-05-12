@@ -215,7 +215,7 @@ export default async function RankingPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-6 p-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div className="max-w-2xl space-y-1">
-                    <h2 className="text-lg font-semibold">Difficult Topics</h2>
+                    <h1 className="text-lg font-semibold">Difficult Topics</h1>
                     <p className="text-sm text-muted-foreground">
                         See the hardest topics and concepts by question difficulty, then jump into focused practice.
                     </p>

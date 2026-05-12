@@ -52,7 +52,7 @@ export default async function FaqPage() {
                         <CircleHelp className="size-4" />
                         Help
                     </div>
-                    <h2 className="text-lg font-semibold">FAQ</h2>
+                    <h1 className="text-lg font-semibold">FAQ</h1>
                     <p className="text-sm leading-6 text-muted-foreground">
                         Answers to common questions about practicing quizzes, concept rankings, and account-based progress.
                     </p>

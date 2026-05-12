@@ -271,9 +271,9 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                                 </>
                             ) : (
                                 <>
-                                    <CardTitle className="text-2xl tracking-tight">
+                                    <h1 className="text-2xl font-semibold leading-none tracking-tight">
                                         {title ?? sourceLabel}
-                                    </CardTitle>
+                                    </h1>
                                     <CardDescription className="max-w-2xl text-sm leading-6">
                                         {source?.description ?? "Choose one answer for each question."}
                                     </CardDescription>
