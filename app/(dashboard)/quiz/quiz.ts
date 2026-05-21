@@ -1,25 +1,34 @@
-"use server"
-import {database} from "@/lib/database";
+"use server";
+
+import {auth} from "@clerk/nextjs/server";
+import {and, asc, count, eq, inArray, sql} from "drizzle-orm";
+import {revalidatePath} from "next/cache";
+
 import {
     conceptTable,
     questionConceptRatingTable,
-    questionConceptsTable as questionConcepts,
+    questionConceptsTable,
     questionOptionTable,
     questionTable,
-    ratingEventTable,
-    quizQuestionTable as quizQuestion,
+    quizQuestionTable,
     quizTable,
-    topicConceptsTable as topicConcepts,
+    ratingEventTable,
+    topicConceptsTable,
     topicTable,
     userAnswerTable,
-    userConceptRatingTable
+    userConceptRatingTable,
 } from "@/db/schema";
-import {revalidatePath} from "next/cache";
-import {auth} from "@clerk/nextjs/server";
-import {and, asc, count, eq, inArray, sql} from "drizzle-orm";
+import {database} from "@/lib/database";
+
+type ActionStatus = "success" | "error";
+
+type ActionState = {
+    status: ActionStatus;
+    message: string;
+};
 
 type CreateQuestionState = {
-    status: "idle" | "success" | "error";
+    status: "idle" | ActionStatus;
     message?: string;
     resetKey?: string;
 };
@@ -29,20 +38,10 @@ type UpdateQuestionConceptsInput = {
     conceptIds: number[];
 };
 
-type UpdateQuestionConceptsState = {
-    status: "success" | "error";
-    message: string;
-};
-
 type UpdateQuestionOptionsInput = {
     questionId: number;
     options: string[];
     correctIndex: number;
-};
-
-type UpdateQuestionOptionsState = {
-    status: "success" | "error";
-    message: string;
 };
 
 type UpdateQuestionQuizzesInput = {
@@ -50,18 +49,8 @@ type UpdateQuestionQuizzesInput = {
     quizIds: number[];
 };
 
-type UpdateQuestionQuizzesState = {
-    status: "success" | "error";
-    message: string;
-};
-
 type DeleteQuestionInput = {
     questionId: number;
-};
-
-type DeleteQuestionState = {
-    status: "success" | "error";
-    message: string;
 };
 
 type SubmitAnswerInput = {
@@ -69,27 +58,35 @@ type SubmitAnswerInput = {
     optionId: number;
 };
 
-type SubmitAnswerState = {
-    status: "success" | "error";
-    message: string;
+type SubmitAnswerState = ActionState & {
     answerId?: number;
     wasCorrect?: boolean;
+};
+
+type QuestionOptionJson = {
+    id: number;
+    option: string;
+    isCorrect: boolean;
+};
+
+type QuizJson = {
+    id: number;
+    title: string;
+    description: string;
+};
+
+type ConceptJson = {
+    id: number;
+    name: string;
+    description: string | null;
 };
 
 export type SimilarQuestionResult = {
     id: number;
     question: string;
     body: string | null;
-    options: {
-        id: number;
-        option: string;
-        isCorrect: boolean;
-        score?: number;
-    }[];
-    quizzes: {
-        id: number;
-        title: string;
-    }[];
+    options: (QuestionOptionJson & {score?: number})[];
+    quizzes: Pick<QuizJson, "id" | "title">[];
     score: number;
 };
 
@@ -104,12 +101,28 @@ export type QuestionConceptRating = {
 const DEFAULT_CONCEPT_RATING = 1000;
 const RATING_K_FACTOR = 32;
 
+const MAX_QUESTION_LENGTH = 255;
+const MAX_BODY_LENGTH = 1024;
+const MAX_OPTION_LENGTH = 255;
+
 const MIN_SIMILARITY_QUERY_LENGTH = 8;
 const SIMILAR_QUESTION_LIMIT = 8;
 const SIMILAR_QUESTION_THRESHOLD = 0.18;
+
+const QUIZ_PATH = "/quiz";
+const SELF_QUIZ_PATH = "/quiz/self";
+
 let pgTrgmSchema: string | null | undefined;
 
-function normalizeComparableText(value: string) {
+function success(message: string): ActionState {
+    return {status: "success", message};
+}
+
+function error(message: string): ActionState {
+    return {status: "error", message};
+}
+
+function normalizeComparableText(value: string): string {
     return value
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, " ")
@@ -117,11 +130,118 @@ function normalizeComparableText(value: string) {
         .trim();
 }
 
-function quoteSqlIdentifier(identifier: string) {
+function quoteSqlIdentifier(identifier: string): string {
     return `"${identifier.replaceAll("\"", "\"\"")}"`;
 }
 
-async function getPgTrgmSchema() {
+function uniqueIntegerIds(ids: Iterable<number>): number[] {
+    return [...new Set(ids)].filter(Number.isInteger);
+}
+
+function parseInteger(value: FormDataEntryValue | null): number | null {
+    if (value === null) {
+        return null;
+    }
+
+    const parsedValue = Number.parseInt(String(value), 10);
+    return Number.isInteger(parsedValue) ? parsedValue : null;
+}
+
+function parseIntegerList(formData: FormData, name: string): number[] {
+    return uniqueIntegerIds(
+        formData
+            .getAll(name)
+            .map(parseInteger)
+            .filter((value): value is number => value !== null)
+    );
+}
+
+function parseCorrectOptionIndex(value: FormDataEntryValue | null): number {
+    const rawValue = String(value ?? "");
+    const indexValue = rawValue.includes("-")
+        ? rawValue.split("-").at(-1) ?? ""
+        : rawValue;
+
+    return Number.parseInt(indexValue, 10);
+}
+
+function normalizeOptions(options: string[]): string[] {
+    return options.map((option) => option.trim());
+}
+
+function validateOptions(options: string[], correctIndex: number): ActionState | null {
+    if (options.length === 0) {
+        return error("Add at least one option.");
+    }
+
+    if (options.some((option) => option.length === 0)) {
+        return error("Options cannot be empty.");
+    }
+
+    if (options.some((option) => option.length > MAX_OPTION_LENGTH)) {
+        return error(`Each option must be ${MAX_OPTION_LENGTH} characters or fewer.`);
+    }
+
+    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) {
+        return error("Choose the correct option.");
+    }
+
+    return null;
+}
+
+function jsonArray<T>(value: T[] | null): T[] {
+    return Array.isArray(value) ? value : [];
+}
+
+async function getAuthenticatedUserId(): Promise<string | null> {
+    const {isAuthenticated, userId} = await auth();
+    return isAuthenticated && userId ? userId : null;
+}
+
+async function getOwnedQuestionId(questionId: number, userId: string): Promise<number | null> {
+    if (!Number.isInteger(questionId)) {
+        return null;
+    }
+
+    const [question] = await database
+        .select({id: questionTable.id})
+        .from(questionTable)
+        .where(and(
+            eq(questionTable.id, questionId),
+            eq(questionTable.ownerId, userId)
+        ))
+        .limit(1);
+
+    return question?.id ?? null;
+}
+
+async function allQuizzesExist(quizIds: number[]): Promise<boolean> {
+    if (quizIds.length === 0) {
+        return true;
+    }
+
+    const existingQuizzes = await database
+        .select({id: quizTable.id})
+        .from(quizTable)
+        .where(inArray(quizTable.id, quizIds));
+
+    return existingQuizzes.length === quizIds.length;
+}
+
+async function allConceptsExist(conceptIds: number[]): Promise<boolean> {
+    if (conceptIds.length === 0) {
+        return true;
+    }
+
+    const existingConcepts = await database
+        .select({id: conceptTable.id})
+        .from(conceptTable)
+        .where(inArray(conceptTable.id, conceptIds));
+
+    return existingConcepts.length === conceptIds.length;
+}
+
+async function getPgTrgmSchema(): Promise<string | null> {
     if (pgTrgmSchema !== undefined) {
         return pgTrgmSchema;
     }
@@ -150,18 +270,19 @@ function calculateRatingChange(userRating: number, questionRating: number, wasCo
     };
 }
 
-export async function getAllQuizzes (){
+export async function getAllQuizzes() {
     return database
         .select({
             id: quizTable.id,
             slug: quizTable.slug,
-            title:quizTable.title,
-            description:quizTable.description,
-            questionCount: count(quizQuestion.quizId),
+            title: quizTable.title,
+            description: quizTable.description,
+            questionCount: count(quizQuestionTable.quizId),
         })
         .from(quizTable)
-        .leftJoin(quizQuestion, eq(quizTable.id, quizQuestion.quizId))
+        .leftJoin(quizQuestionTable, eq(quizTable.id, quizQuestionTable.quizId))
         .groupBy(quizTable.id)
+        .orderBy(asc(quizTable.title));
 }
 
 export async function getAllConcepts() {
@@ -185,9 +306,7 @@ export async function getSimilarQuestions(input: {
     const options = input.options?.map((option) => option.trim()).filter(Boolean) ?? [];
     const searchText = [prompt, body, ...options].filter(Boolean).join(" ");
 
-    const {isAuthenticated} = await auth();
-
-    if (!isAuthenticated || normalizeComparableText(searchText).length < MIN_SIMILARITY_QUERY_LENGTH) {
+    if (!await getAuthenticatedUserId() || normalizeComparableText(searchText).length < MIN_SIMILARITY_QUERY_LENGTH) {
         return [];
     }
 
@@ -203,13 +322,9 @@ export async function getSimilarQuestions(input: {
     const wordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.word_similarity`);
     const strictWordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.strict_word_similarity`);
 
-    type SimilarQuestionRow = {
-        id: number;
-        question: string;
-        body: string | null;
-        options: SimilarQuestionResult["options"];
-        quizzes: SimilarQuestionResult["quizzes"];
-        score: number;
+    type SimilarQuestionRow = Omit<SimilarQuestionResult, "options" | "quizzes"> & {
+        options: SimilarQuestionResult["options"] | null;
+        quizzes: SimilarQuestionResult["quizzes"] | null;
     };
 
     const result = await database.execute<SimilarQuestionRow>(sql`
@@ -306,28 +421,25 @@ export async function getSimilarQuestions(input: {
         id: Number(row.id),
         question: row.question,
         body: row.body,
-        options: Array.isArray(row.options) ? row.options : [],
-        quizzes: Array.isArray(row.quizzes) ? row.quizzes : [],
+        options: jsonArray(row.options),
+        quizzes: jsonArray(row.quizzes),
         score: Number(row.score),
     }));
 }
 
 export async function getAllTopicsWithConcepts() {
-    type ConceptJson = {
-        id: number;
+    type TopicConceptJson = ConceptJson & {
         slug: string;
-        name: string;
-        description: string | null;
         questionCount: number;
     };
 
     const conceptQuestionCountsSq = database
         .select({
-            conceptId: questionConcepts.conceptId,
-            questionCount: count(questionConcepts.questionId).as("question_count"),
+            conceptId: questionConceptsTable.conceptId,
+            questionCount: count(questionConceptsTable.questionId).as("question_count"),
         })
-        .from(questionConcepts)
-        .groupBy(questionConcepts.conceptId)
+        .from(questionConceptsTable)
+        .groupBy(questionConceptsTable.conceptId)
         .as("concept_question_counts_sq");
 
     return database
@@ -336,7 +448,7 @@ export async function getAllTopicsWithConcepts() {
             slug: topicTable.slug,
             title: topicTable.title,
             description: topicTable.description,
-            concepts: sql<ConceptJson[]>`
+            concepts: sql<TopicConceptJson[]>`
                 coalesce(
                     json_agg(
                         json_build_object(
@@ -347,216 +459,150 @@ export async function getAllTopicsWithConcepts() {
                             'questionCount', coalesce(${conceptQuestionCountsSq.questionCount}, 0)
                         )
                         order by ${conceptTable.name}
-                    ) FILTER (WHERE ${conceptTable.id} IS NOT NULL),
+                    ) filter (where ${conceptTable.id} is not null),
                     '[]'::json
                 )
             `,
         })
         .from(topicTable)
-        .leftJoin(topicConcepts, eq(topicTable.id, topicConcepts.topicId))
-        .leftJoin(conceptTable, eq(topicConcepts.conceptId, conceptTable.id))
+        .leftJoin(topicConceptsTable, eq(topicTable.id, topicConceptsTable.topicId))
+        .leftJoin(conceptTable, eq(topicConceptsTable.conceptId, conceptTable.id))
         .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
         .groupBy(topicTable.id)
         .orderBy(asc(topicTable.title));
 }
 
-export async function getMyQuestions (){
-    const {isAuthenticated,userId} = await auth();
+export async function getMyQuestions() {
+    const userId = await getAuthenticatedUserId();
 
-    if(!isAuthenticated){
-        // bad req
+    if (!userId) {
         return [];
     }
-
-
-    type ConceptJson = {
-        id: number;
-        name: string;
-        description: string | null;
-    };
-
-    type QuizJson = {
-        id: number;
-        title: string;
-        description: string;
-    };
-
-    type OptionJson = {
-        id: number;
-        option: string;
-        isCorrect: boolean;
-    };
 
     const conceptsSq = database
         .select({
             concepts: sql<ConceptJson[]>`
-        coalesce(
-          json_agg(
-            json_build_object(
-              'id', ${conceptTable.id},
-              'name', ${conceptTable.name},
-              'description', ${conceptTable.description}
-            )
-            order by ${conceptTable.id}
-          ),
-          '[]'::json
-        )
-      `.as("concepts"),
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${conceptTable.id},
+                            'name', ${conceptTable.name},
+                            'description', ${conceptTable.description}
+                        )
+                        order by ${conceptTable.id}
+                    ),
+                    '[]'::json
+                )
+            `.as("concepts"),
         })
-        .from(questionConcepts)
-        .innerJoin(
-            conceptTable,
-            eq(questionConcepts.conceptId, conceptTable.id)
-        )
-        .where(eq(questionConcepts.questionId, questionTable.id))
+        .from(questionConceptsTable)
+        .innerJoin(conceptTable, eq(questionConceptsTable.conceptId, conceptTable.id))
+        .where(eq(questionConceptsTable.questionId, questionTable.id))
         .as("concepts_sq");
-
 
     const quizzesSq = database
         .select({
             quizzes: sql<QuizJson[]>`
-        coalesce(
-          json_agg(
-            json_build_object(
-              'id', ${quizTable.id},
-              'title', ${quizTable.title},
-              'description', ${quizTable.description}
-            )
-            order by ${quizTable.id}
-          ),
-          '[]'::json
-        )
-      `.as("quizzes"),
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${quizTable.id},
+                            'title', ${quizTable.title},
+                            'description', ${quizTable.description}
+                        )
+                        order by ${quizTable.id}
+                    ),
+                    '[]'::json
+                )
+            `.as("quizzes"),
         })
-        .from(quizQuestion)
-        .innerJoin(quizTable, eq(quizQuestion.quizId, quizTable.id))
-        .where(eq(quizQuestion.questionId, questionTable.id))
+        .from(quizQuestionTable)
+        .innerJoin(quizTable, eq(quizQuestionTable.quizId, quizTable.id))
+        .where(eq(quizQuestionTable.questionId, questionTable.id))
         .as("quizzes_sq");
-
 
     const optionsSq = database
         .select({
-            options: sql<OptionJson[]>`
-        coalesce(
-          json_agg(
-            json_build_object(
-              'id', ${questionOptionTable.id},
-              'option', ${questionOptionTable.option},
-              'isCorrect', ${questionOptionTable.isCorrect}
-            )
-            order by ${questionOptionTable.id}
-          ),
-          '[]'::json
-        )
-      `.as("options"),
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ),
+                    '[]'::json
+                )
+            `.as("options"),
         })
         .from(questionOptionTable)
         .where(eq(questionOptionTable.questionId, questionTable.id))
         .as("options_sq");
 
-
-    const rows = await database
+    return database
         .select({
             id: questionTable.id,
             question: questionTable.question,
             ownerId: questionTable.ownerId,
             body: questionTable.body,
-
             concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
             quizzes: sql<QuizJson[]>`coalesce(${quizzesSq.quizzes}, '[]'::json)`,
-            options: sql<OptionJson[]>`coalesce(${optionsSq.options}, '[]'::json)`,
+            options: sql<QuestionOptionJson[]>`coalesce(${optionsSq.options}, '[]'::json)`,
         })
-        .from(questionTable).where(eq(questionTable.ownerId, userId))
+        .from(questionTable)
+        .where(eq(questionTable.ownerId, userId))
         .leftJoinLateral(conceptsSq, sql`true`)
         .leftJoinLateral(quizzesSq, sql`true`)
         .leftJoinLateral(optionsSq, sql`true`);
-
-    return rows;
 }
 
-export async function createQuestion(_prevState: CreateQuestionState, formData: FormData): Promise<CreateQuestionState> {
+export async function createQuestion(
+    _prevState: CreateQuestionState,
+    formData: FormData
+): Promise<CreateQuestionState> {
     const prompt = String(formData.get("prompt") ?? "").trim();
     const body = String(formData.get("body") ?? "").trim();
-    const correctOption = String(formData.get("correctOption") ?? "");
-    const options = formData.getAll("options[]").map((option) => String(option).trim());
-    const parsedCorrectIndex = Number.parseInt(
-        correctOption.includes("-")
-            ? correctOption.split("-")[1] ?? ""
-            : correctOption,
-        10
-    );
-    const quizIds = [...new Set([
-        ...formData
-            .getAll("quizIds[]")
-            .map((quizId) => Number.parseInt(String(quizId), 10))
-            .filter((quizId) => Number.isInteger(quizId)),
-        ...(
-            formData.get("quizId")
-                ? [Number.parseInt(String(formData.get("quizId")), 10)]
-                : []
-        ),
-    ])];
-    const conceptIds = [...new Set(
-        formData
-            .getAll("conceptIds[]")
-            .map((conceptId) => Number.parseInt(String(conceptId), 10))
-            .filter((conceptId) => Number.isInteger(conceptId))
-    )];
+    const correctIndex = parseCorrectOptionIndex(formData.get("correctOption"));
+    const options = normalizeOptions(formData.getAll("options[]").map(String));
+    const quizId = parseInteger(formData.get("quizId"));
+    const quizIds = uniqueIntegerIds([
+        ...parseIntegerList(formData, "quizIds[]"),
+        ...(quizId === null ? [] : [quizId]),
+    ]);
+    const conceptIds = parseIntegerList(formData, "conceptIds[]");
 
-    const { isAuthenticated,userId } = await auth();
+    const userId = await getAuthenticatedUserId();
 
-    if(!isAuthenticated){
-        return {status: "error", message: "You must be signed in to create a question."};
+    if (!userId) {
+        return error("You must be signed in to create a question.");
     }
 
     if (!prompt) {
-        return {status: "error", message: "Enter a prompt."};
+        return error("Enter a prompt.");
     }
 
-    if (prompt.length > 255) {
-        return {status: "error", message: "Prompt must be 255 characters or fewer."};
+    if (prompt.length > MAX_QUESTION_LENGTH) {
+        return error(`Prompt must be ${MAX_QUESTION_LENGTH} characters or fewer.`);
     }
 
-    if (body.length > 1024) {
-        return {status: "error", message: "Body must be 1024 characters or fewer."};
+    if (body.length > MAX_BODY_LENGTH) {
+        return error(`Body must be ${MAX_BODY_LENGTH} characters or fewer.`);
     }
 
-    if (options.length === 0) {
-        return {status: "error", message: "Add at least one option."};
+    const optionError = validateOptions(options, correctIndex);
+
+    if (optionError) {
+        return optionError;
     }
 
-    if (options.some((option) => option.length === 0)) {
-        return {status: "error", message: "Options cannot be empty."};
+    if (!await allQuizzesExist(quizIds)) {
+        return error("One or more quizzes could not be found.");
     }
 
-    if (options.some((option) => option.length > 255)) {
-        return {status: "error", message: "Each option must be 255 characters or fewer."};
-    }
-
-    if (!Number.isInteger(parsedCorrectIndex) || parsedCorrectIndex < 0 || parsedCorrectIndex >= options.length) {
-        return {status: "error", message: "Choose the correct option."};
-    }
-
-    if (quizIds.length > 0) {
-        const existingQuizzes = await database
-            .select({id: quizTable.id})
-            .from(quizTable)
-            .where(inArray(quizTable.id, quizIds));
-
-        if (existingQuizzes.length !== quizIds.length) {
-            return {status: "error", message: "One or more quizzes could not be found."};
-        }
-    }
-
-    if (conceptIds.length > 0) {
-        const existingConcepts = await database
-            .select({id: conceptTable.id})
-            .from(conceptTable)
-            .where(inArray(conceptTable.id, conceptIds));
-
-        if (existingConcepts.length !== conceptIds.length) {
-            return {status: "error", message: "One or more concepts could not be found."};
-        }
+    if (!await allConceptsExist(conceptIds)) {
+        return error("One or more concepts could not be found.");
     }
 
     try {
@@ -570,25 +616,29 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
                 })
                 .returning({id: questionTable.id});
 
+            if (!question) {
+                throw new Error("Question insert did not return an id.");
+            }
+
             if (quizIds.length > 0) {
-                await tx.insert(quizQuestion).values(
-                    quizIds.map((quizId) => ({
-                        quizId,
+                await tx.insert(quizQuestionTable).values(
+                    quizIds.map((quizIdValue) => ({
+                        quizId: quizIdValue,
                         questionId: question.id,
                     }))
                 );
             }
 
             await tx.insert(questionOptionTable).values(
-                options.map((option, idx) => ({
+                options.map((option, index) => ({
                     questionId: question.id,
                     option,
-                    isCorrect: idx === parsedCorrectIndex,
+                    isCorrect: index === correctIndex,
                 }))
             );
 
             if (conceptIds.length > 0) {
-                await tx.insert(questionConcepts).values(
+                await tx.insert(questionConceptsTable).values(
                     conceptIds.map((conceptId) => ({
                         questionId: question.id,
                         conceptId,
@@ -597,99 +647,60 @@ export async function createQuestion(_prevState: CreateQuestionState, formData: 
             }
         });
 
-        revalidatePath("/quiz");
-        revalidatePath("/quiz/self");
+        revalidatePath(QUIZ_PATH);
+        revalidatePath(SELF_QUIZ_PATH);
 
         return {
-            status: "success",
-            message: "Question created.",
+            ...success("Question created."),
             resetKey: crypto.randomUUID(),
         };
     } catch {
-        return {status: "error", message: "Unable to save the question right now."};
+        return error("Unable to save the question right now.");
     }
 }
 
 export async function updateQuestionConcepts({
     questionId,
     conceptIds,
-}: UpdateQuestionConceptsInput): Promise<UpdateQuestionConceptsState> {
-    const {isAuthenticated, userId} = await auth();
+}: UpdateQuestionConceptsInput): Promise<ActionState> {
+    const userId = await getAuthenticatedUserId();
 
-    if (!isAuthenticated) {
-        return {
-            status: "error",
-            message: "You must be signed in to update concepts.",
-        };
+    if (!userId) {
+        return error("You must be signed in to update concepts.");
     }
 
-    if (!Number.isInteger(questionId)) {
-        return {
-            status: "error",
-            message: "Question not found.",
-        };
+    const ownedQuestionId = await getOwnedQuestionId(questionId, userId);
+
+    if (!ownedQuestionId) {
+        return error("Question not found or you do not have access to it.");
     }
 
-    const uniqueConceptIds = [...new Set(conceptIds)]
-        .filter((conceptId) => Number.isInteger(conceptId));
+    const uniqueConceptIds = uniqueIntegerIds(conceptIds);
 
-    const [ownedQuestion] = await database
-        .select({id: questionTable.id})
-        .from(questionTable)
-        .where(and(
-            eq(questionTable.id, questionId),
-            eq(questionTable.ownerId, userId),
-        ))
-        .limit(1);
-
-    if (!ownedQuestion) {
-        return {
-            status: "error",
-            message: "Question not found or you do not have access to it.",
-        };
-    }
-
-    if (uniqueConceptIds.length > 0) {
-        const existingConcepts = await database
-            .select({id: conceptTable.id})
-            .from(conceptTable)
-            .where(inArray(conceptTable.id, uniqueConceptIds));
-
-        if (existingConcepts.length !== uniqueConceptIds.length) {
-            return {
-                status: "error",
-                message: "One or more concepts could not be found.",
-            };
-        }
+    if (!await allConceptsExist(uniqueConceptIds)) {
+        return error("One or more concepts could not be found.");
     }
 
     try {
         await database.transaction(async (tx) => {
             await tx
-                .delete(questionConcepts)
-                .where(eq(questionConcepts.questionId, questionId));
+                .delete(questionConceptsTable)
+                .where(eq(questionConceptsTable.questionId, ownedQuestionId));
 
             if (uniqueConceptIds.length > 0) {
-                await tx.insert(questionConcepts).values(
+                await tx.insert(questionConceptsTable).values(
                     uniqueConceptIds.map((conceptId) => ({
-                        questionId,
+                        questionId: ownedQuestionId,
                         conceptId,
                     }))
                 );
             }
         });
 
-        revalidatePath("/quiz/self");
-
-        return {
-            status: "success",
-            message: "Concepts updated.",
-        };
+        revalidatePath(SELF_QUIZ_PATH);
+        return success("Concepts updated.");
     } catch {
-        return {
-            status: "error",
-            message: "Unable to update concepts right now.",
-        };
+        return error("Unable to update concepts right now.");
     }
 }
 
@@ -697,261 +708,150 @@ export async function updateQuestionOptions({
     questionId,
     options,
     correctIndex,
-}: UpdateQuestionOptionsInput): Promise<UpdateQuestionOptionsState> {
-    const {isAuthenticated, userId} = await auth();
+}: UpdateQuestionOptionsInput): Promise<ActionState> {
+    const userId = await getAuthenticatedUserId();
 
-    if (!isAuthenticated) {
-        return {
-            status: "error",
-            message: "You must be signed in to update options.",
-        };
+    if (!userId) {
+        return error("You must be signed in to update options.");
     }
 
-    if (!Number.isInteger(questionId)) {
-        return {
-            status: "error",
-            message: "Question not found.",
-        };
+    const normalizedOptions = normalizeOptions(options);
+    const optionError = validateOptions(normalizedOptions, correctIndex);
+
+    if (optionError) {
+        return optionError;
     }
 
-    const normalizedOptions = options.map((option) => option.trim());
+    const ownedQuestionId = await getOwnedQuestionId(questionId, userId);
 
-    if (normalizedOptions.length === 0) {
-        return {
-            status: "error",
-            message: "Add at least one option.",
-        };
-    }
-
-    if (normalizedOptions.some((option) => option.length === 0)) {
-        return {
-            status: "error",
-            message: "Options cannot be empty.",
-        };
-    }
-
-    if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= normalizedOptions.length) {
-        return {
-            status: "error",
-            message: "Choose the correct option.",
-        };
-    }
-
-    const [ownedQuestion] = await database
-        .select({id: questionTable.id})
-        .from(questionTable)
-        .where(and(
-            eq(questionTable.id, questionId),
-            eq(questionTable.ownerId, userId),
-        ))
-        .limit(1);
-
-    if (!ownedQuestion) {
-        return {
-            status: "error",
-            message: "Question not found or you do not have access to it.",
-        };
+    if (!ownedQuestionId) {
+        return error("Question not found or you do not have access to it.");
     }
 
     try {
         await database.transaction(async (tx) => {
             await tx
                 .delete(questionOptionTable)
-                .where(eq(questionOptionTable.questionId, questionId));
+                .where(eq(questionOptionTable.questionId, ownedQuestionId));
 
             await tx.insert(questionOptionTable).values(
                 normalizedOptions.map((option, index) => ({
-                    questionId,
+                    questionId: ownedQuestionId,
                     option,
                     isCorrect: index === correctIndex,
                 }))
             );
         });
 
-        revalidatePath("/quiz/self");
-
-        return {
-            status: "success",
-            message: "Options updated.",
-        };
+        revalidatePath(SELF_QUIZ_PATH);
+        return success("Options updated.");
     } catch {
-        return {
-            status: "error",
-            message: "Unable to update options right now.",
-        };
+        return error("Unable to update options right now.");
     }
 }
 
 export async function updateQuestionQuizzes({
     questionId,
     quizIds,
-}: UpdateQuestionQuizzesInput): Promise<UpdateQuestionQuizzesState> {
-    const {isAuthenticated, userId} = await auth();
+}: UpdateQuestionQuizzesInput): Promise<ActionState> {
+    const userId = await getAuthenticatedUserId();
 
-    if (!isAuthenticated) {
-        return {
-            status: "error",
-            message: "You must be signed in to update quizzes.",
-        };
+    if (!userId) {
+        return error("You must be signed in to update quizzes.");
     }
 
-    if (!Number.isInteger(questionId)) {
-        return {
-            status: "error",
-            message: "Question not found.",
-        };
+    const ownedQuestionId = await getOwnedQuestionId(questionId, userId);
+
+    if (!ownedQuestionId) {
+        return error("Question not found or you do not have access to it.");
     }
 
-    const uniqueQuizIds = [...new Set(quizIds)]
-        .filter((quizId) => Number.isInteger(quizId));
+    const uniqueQuizIds = uniqueIntegerIds(quizIds);
 
-    const [ownedQuestion] = await database
-        .select({id: questionTable.id})
-        .from(questionTable)
-        .where(and(
-            eq(questionTable.id, questionId),
-            eq(questionTable.ownerId, userId),
-        ))
-        .limit(1);
-
-    if (!ownedQuestion) {
-        return {
-            status: "error",
-            message: "Question not found or you do not have access to it.",
-        };
-    }
-
-    if (uniqueQuizIds.length > 0) {
-        const existingQuizzes = await database
-            .select({id: quizTable.id})
-            .from(quizTable)
-            .where(inArray(quizTable.id, uniqueQuizIds));
-
-        if (existingQuizzes.length !== uniqueQuizIds.length) {
-            return {
-                status: "error",
-                message: "One or more quizzes could not be found.",
-            };
-        }
+    if (!await allQuizzesExist(uniqueQuizIds)) {
+        return error("One or more quizzes could not be found.");
     }
 
     try {
         await database.transaction(async (tx) => {
             await tx
-                .delete(quizQuestion)
-                .where(eq(quizQuestion.questionId, questionId));
+                .delete(quizQuestionTable)
+                .where(eq(quizQuestionTable.questionId, ownedQuestionId));
 
             if (uniqueQuizIds.length > 0) {
-                await tx.insert(quizQuestion).values(
+                await tx.insert(quizQuestionTable).values(
                     uniqueQuizIds.map((quizId) => ({
-                        questionId,
+                        questionId: ownedQuestionId,
                         quizId,
                     }))
                 );
             }
         });
 
-        revalidatePath("/quiz");
-        revalidatePath("/quiz/self");
-
-        return {
-            status: "success",
-            message: "Quizzes updated.",
-        };
+        revalidatePath(QUIZ_PATH);
+        revalidatePath(SELF_QUIZ_PATH);
+        return success("Quizzes updated.");
     } catch {
-        return {
-            status: "error",
-            message: "Unable to update quizzes right now.",
-        };
+        return error("Unable to update quizzes right now.");
     }
 }
 
 export async function deleteQuestion({
     questionId,
-}: DeleteQuestionInput): Promise<DeleteQuestionState> {
-    const {isAuthenticated, userId} = await auth();
+}: DeleteQuestionInput): Promise<ActionState> {
+    const userId = await getAuthenticatedUserId();
 
-    if (!isAuthenticated) {
-        return {
-            status: "error",
-            message: "You must be signed in to delete questions.",
-        };
+    if (!userId) {
+        return error("You must be signed in to delete questions.");
     }
 
-    if (!Number.isInteger(questionId)) {
-        return {
-            status: "error",
-            message: "Question not found.",
-        };
-    }
+    const ownedQuestionId = await getOwnedQuestionId(questionId, userId);
 
-    const [ownedQuestion] = await database
-        .select({id: questionTable.id})
-        .from(questionTable)
-        .where(and(
-            eq(questionTable.id, questionId),
-            eq(questionTable.ownerId, userId),
-        ))
-        .limit(1);
-
-    if (!ownedQuestion) {
-        return {
-            status: "error",
-            message: "Question not found or you do not have access to it.",
-        };
+    if (!ownedQuestionId) {
+        return error("Question not found or you do not have access to it.");
     }
 
     const [submittedAnswer] = await database
         .select({id: userAnswerTable.id})
         .from(userAnswerTable)
-        .where(eq(userAnswerTable.questionId, questionId))
+        .where(eq(userAnswerTable.questionId, ownedQuestionId))
         .limit(1);
 
     if (submittedAnswer) {
-        return {
-            status: "error",
-            message: "This question has submitted answers and cannot be deleted.",
-        };
+        return error("This question has submitted answers and cannot be deleted.");
     }
 
     try {
         await database.transaction(async (tx) => {
             await tx
                 .delete(questionConceptRatingTable)
-                .where(eq(questionConceptRatingTable.questionId, questionId));
+                .where(eq(questionConceptRatingTable.questionId, ownedQuestionId));
 
             await tx
-                .delete(quizQuestion)
-                .where(eq(quizQuestion.questionId, questionId));
+                .delete(quizQuestionTable)
+                .where(eq(quizQuestionTable.questionId, ownedQuestionId));
 
             await tx
-                .delete(questionConcepts)
-                .where(eq(questionConcepts.questionId, questionId));
+                .delete(questionConceptsTable)
+                .where(eq(questionConceptsTable.questionId, ownedQuestionId));
 
             await tx
                 .delete(questionOptionTable)
-                .where(eq(questionOptionTable.questionId, questionId));
+                .where(eq(questionOptionTable.questionId, ownedQuestionId));
 
             await tx
                 .delete(questionTable)
                 .where(and(
-                    eq(questionTable.id, questionId),
-                    eq(questionTable.ownerId, userId),
+                    eq(questionTable.id, ownedQuestionId),
+                    eq(questionTable.ownerId, userId)
                 ));
         });
 
-        revalidatePath("/quiz");
-        revalidatePath("/quiz/self");
-
-        return {
-            status: "success",
-            message: "Question deleted.",
-        };
+        revalidatePath(QUIZ_PATH);
+        revalidatePath(SELF_QUIZ_PATH);
+        return success("Question deleted.");
     } catch {
-        return {
-            status: "error",
-            message: "Unable to delete the question right now.",
-        };
+        return error("Unable to delete the question right now.");
     }
 }
 
@@ -959,23 +859,16 @@ export async function submitUserAnswer({
     questionId,
     optionId,
 }: SubmitAnswerInput): Promise<SubmitAnswerState> {
-    const {isAuthenticated, userId} = await auth();
+    const userId = await getAuthenticatedUserId();
 
-    if (!isAuthenticated) {
-        return {
-            status: "error",
-            message: "You must be signed in to answer questions.",
-        };
+    if (!userId) {
+        return error("You must be signed in to answer questions.");
     }
 
     if (!Number.isInteger(questionId) || !Number.isInteger(optionId)) {
-        return {
-            status: "error",
-            message: "Choose an answer before continuing.",
-        };
+        return error("Choose an answer before continuing.");
     }
 
-    //
     const [selectedOption] = await database
         .select({
             id: questionOptionTable.id,
@@ -987,17 +880,11 @@ export async function submitUserAnswer({
         .limit(1);
 
     if (!selectedOption) {
-        return {
-            status: "error",
-            message: "Answer option not found.",
-        };
+        return error("Answer option not found.");
     }
 
     if (selectedOption.questionId !== questionId) {
-        return {
-            status: "error",
-            message: "Answer option does not belong to this question.",
-        };
+        return error("Answer option does not belong to this question.");
     }
 
     const [existingAnswer] = await database
@@ -1008,14 +895,13 @@ export async function submitUserAnswer({
         .from(userAnswerTable)
         .where(and(
             eq(userAnswerTable.userId, userId),
-            eq(userAnswerTable.questionId, questionId),
+            eq(userAnswerTable.questionId, questionId)
         ))
         .limit(1);
 
     if (existingAnswer) {
         return {
-            status: "success",
-            message: "Answer already recorded.",
+            ...success("Answer already recorded."),
             answerId: existingAnswer.id,
             wasCorrect: existingAnswer.wasCorrect,
         };
@@ -1031,16 +917,16 @@ export async function submitUserAnswer({
                     optionId: selectedOption.id,
                     wasCorrect: selectedOption.isCorrect,
                 })
-                .returning({
-                    id: userAnswerTable.id,
-                });
+                .returning({id: userAnswerTable.id});
+
+            if (!createdAnswer) {
+                throw new Error("Answer insert did not return an id.");
+            }
 
             const conceptRows = await tx
-                .select({
-                    conceptId: questionConcepts.conceptId,
-                })
-                .from(questionConcepts)
-                .where(eq(questionConcepts.questionId, selectedOption.questionId));
+                .select({conceptId: questionConceptsTable.conceptId})
+                .from(questionConceptsTable)
+                .where(eq(questionConceptsTable.questionId, selectedOption.questionId));
 
             for (const {conceptId} of conceptRows) {
                 const [existingUserRating] = await tx
@@ -1051,7 +937,7 @@ export async function submitUserAnswer({
                     .from(userConceptRatingTable)
                     .where(and(
                         eq(userConceptRatingTable.userId, userId),
-                        eq(userConceptRatingTable.conceptId, conceptId),
+                        eq(userConceptRatingTable.conceptId, conceptId)
                     ))
                     .for("update");
 
@@ -1077,7 +963,7 @@ export async function submitUserAnswer({
                     .from(questionConceptRatingTable)
                     .where(and(
                         eq(questionConceptRatingTable.questionId, selectedOption.questionId),
-                        eq(questionConceptRatingTable.conceptId, conceptId),
+                        eq(questionConceptRatingTable.conceptId, conceptId)
                     ))
                     .for("update");
 
@@ -1104,7 +990,7 @@ export async function submitUserAnswer({
                 const {newUserRating, newQuestionRating} = calculateRatingChange(
                     oldRatingUser,
                     oldRatingQuestion,
-                    selectedOption.isCorrect,
+                    selectedOption.isCorrect
                 );
 
                 await tx
@@ -1140,24 +1026,18 @@ export async function submitUserAnswer({
         });
 
         return {
-            status: "success",
-            message: "Answer recorded.",
+            ...success("Answer recorded."),
             answerId: answer.id,
             wasCorrect: selectedOption.isCorrect,
         };
-    } catch (error) {
-        console.error("Unable to record user answer", error);
-
-        return {
-            status: "error",
-            message: "Unable to record your answer right now.",
-        };
+    } catch (submitError) {
+        console.error("Unable to record user answer", submitError);
+        return error("Unable to record your answer right now.");
     }
 }
 
 export async function getQuestionConceptRatings(questionIds: number[]): Promise<QuestionConceptRating[]> {
-    const uniqueQuestionIds = [...new Set(questionIds)]
-        .filter((questionId) => Number.isInteger(questionId));
+    const uniqueQuestionIds = uniqueIntegerIds(questionIds);
 
     if (uniqueQuestionIds.length === 0) {
         return [];
@@ -1167,7 +1047,7 @@ export async function getQuestionConceptRatings(questionIds: number[]): Promise<
 
     return database
         .select({
-            questionId: questionConcepts.questionId,
+            questionId: questionConceptsTable.questionId,
             conceptId: conceptTable.id,
             name: conceptTable.name,
             userRating: userId
@@ -1175,31 +1055,31 @@ export async function getQuestionConceptRatings(questionIds: number[]): Promise<
                 : sql<null>`null`,
             questionRating: sql<number>`coalesce(${questionConceptRatingTable.rating}, ${DEFAULT_CONCEPT_RATING})`,
         })
-        .from(questionConcepts)
-        .innerJoin(conceptTable, eq(questionConcepts.conceptId, conceptTable.id))
+        .from(questionConceptsTable)
+        .innerJoin(conceptTable, eq(questionConceptsTable.conceptId, conceptTable.id))
         .leftJoin(
             questionConceptRatingTable,
             and(
-                eq(questionConceptRatingTable.questionId, questionConcepts.questionId),
-                eq(questionConceptRatingTable.conceptId, questionConcepts.conceptId),
+                eq(questionConceptRatingTable.questionId, questionConceptsTable.questionId),
+                eq(questionConceptRatingTable.conceptId, questionConceptsTable.conceptId)
             )
         )
         .leftJoin(
             userConceptRatingTable,
             and(
-                eq(userConceptRatingTable.conceptId, questionConcepts.conceptId),
-                eq(userConceptRatingTable.userId, userId ?? ""),
+                eq(userConceptRatingTable.conceptId, questionConceptsTable.conceptId),
+                eq(userConceptRatingTable.userId, userId ?? "")
             )
         )
-        .where(inArray(questionConcepts.questionId, uniqueQuestionIds))
-        .orderBy(asc(questionConcepts.questionId), asc(conceptTable.name));
+        .where(inArray(questionConceptsTable.questionId, uniqueQuestionIds))
+        .orderBy(asc(questionConceptsTable.questionId), asc(conceptTable.name));
 }
 
-export async function getQuizBySlug(slug: string){
+export async function getQuizBySlug(slug: string) {
     return database
         .select()
         .from(quizTable)
-        .where(eq(quizTable.slug, slug))
+        .where(eq(quizTable.slug, slug));
 }
 
 export async function getConceptById(conceptId: number) {
@@ -1228,7 +1108,7 @@ export async function getConceptByIdentifier(identifier: string) {
     return getConceptBySlug(identifier);
 }
 
-export async function getQuestionsBySlug(slug: string){
+export async function getQuestionsBySlug(slug: string) {
     const quiz = await database
         .select({id: quizTable.id})
         .from(quizTable)
@@ -1240,31 +1120,40 @@ export async function getQuestionsBySlug(slug: string){
         throw new Error("Quiz not found");
     }
 
-    return database.select({
-        quizId: quizQuestion.quizId,
-        questionId: quizQuestion.questionId,
-        question: questionTable.question,
-        body:questionTable.body,
-        options: sql<{id:number,option:string,isCorrect:boolean}[]>`json_agg(
-        json_build_object(
-            'id', ${questionOptionTable.id},
-            'option', ${questionOptionTable.option},
-            'isCorrect', ${questionOptionTable.isCorrect}
-            )
-            ) FILTER (WHERE ${questionOptionTable.id} IS NOT NULL)`,
-    }).from(quizQuestion)
-        .innerJoin(questionTable, eq(questionTable.id, quizQuestion.questionId))
+    return database
+        .select({
+            quizId: quizQuestionTable.quizId,
+            questionId: quizQuestionTable.questionId,
+            question: questionTable.question,
+            body: questionTable.body,
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ) filter (where ${questionOptionTable.id} is not null),
+                    '[]'::json
+                )
+            `,
+        })
+        .from(quizQuestionTable)
+        .innerJoin(questionTable, eq(questionTable.id, quizQuestionTable.questionId))
         .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
-        .where(eq(quizQuestion.quizId, quiz.id))
+        .where(eq(quizQuestionTable.quizId, quiz.id))
         .groupBy(
-            quizQuestion.quizId,
-            quizQuestion.questionId,
+            quizQuestionTable.quizId,
+            quizQuestionTable.questionId,
             questionTable.id,
-            questionTable.question
-        )
+            questionTable.question,
+            questionTable.body
+        );
 }
 
-export async function getQuestionsByConceptId(conceptId: number){
+export async function getQuestionsByConceptId(conceptId: number) {
     if (!Number.isInteger(conceptId)) {
         throw new Error("Concept not found");
     }
@@ -1280,42 +1169,48 @@ export async function getQuestionsByConceptId(conceptId: number){
         throw new Error("Concept not found");
     }
 
-    return database.select({
-        questionId: questionTable.id,
-        question: questionTable.question,
-        body: questionTable.body,
-        options: sql<{id:number,option:string,isCorrect:boolean}[]>`
-            coalesce(
-                json_agg(
-                    json_build_object(
-                        'id', ${questionOptionTable.id},
-                        'option', ${questionOptionTable.option},
-                        'isCorrect', ${questionOptionTable.isCorrect}
-                    )
-                    order by ${questionOptionTable.id}
-                ) FILTER (WHERE ${questionOptionTable.id} IS NOT NULL),
-                '[]'::json
-            )
-        `,
-    }).from(questionConcepts)
-        .innerJoin(questionTable, eq(questionTable.id, questionConcepts.questionId))
+    return database
+        .select({
+            questionId: questionTable.id,
+            question: questionTable.question,
+            body: questionTable.body,
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ) filter (where ${questionOptionTable.id} is not null),
+                    '[]'::json
+                )
+            `,
+        })
+        .from(questionConceptsTable)
+        .innerJoin(questionTable, eq(questionTable.id, questionConceptsTable.questionId))
         .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
-        .where(eq(questionConcepts.conceptId, concept.id))
+        .where(eq(questionConceptsTable.conceptId, concept.id))
         .groupBy(
             questionTable.id,
             questionTable.question,
             questionTable.body
-        )
+        );
 }
 
-export async function getQuizzesByQuestionId(questionId: number){
+export async function getQuizzesByQuestionId(questionId: number) {
+    if (!Number.isInteger(questionId)) {
+        return [];
+    }
+
     return database
         .select({
             id: quizTable.id,
             title: quizTable.title,
             description: quizTable.description,
         })
-        .from(quizQuestion)
-        .innerJoin(quizTable, eq(quizQuestion.quizId, quizTable.id))
-        .where(eq(quizQuestion.questionId, questionId));
+        .from(quizQuestionTable)
+        .innerJoin(quizTable, eq(quizQuestionTable.quizId, quizTable.id))
+        .where(eq(quizQuestionTable.questionId, questionId));
 }

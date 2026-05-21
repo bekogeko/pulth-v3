@@ -1,6 +1,6 @@
 "use client";
 
-import {useActionState, useDeferredValue, useEffect, useMemo, useState} from "react";
+import {useActionState, useDeferredValue, useEffect, useMemo, useRef, useState} from "react";
 import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {Loader2, Plus, Search, Trash2} from "lucide-react";
 import {toast} from "sonner";
@@ -35,6 +35,7 @@ export function CreateQuestionDialog({
 }: CreateQuestionDialogProps) {
     const queryClient = useQueryClient();
     const [state, formAction, pending] = useActionState(createQuestion, INITIAL_STATE);
+    const similarityConfirmationRef = useRef(false);
     const [options, setOptions] = useState<string[]>(INITIAL_OPTIONS);
     const [prompt, setPrompt] = useState("");
     const [body, setBody] = useState("");
@@ -107,6 +108,7 @@ export function CreateQuestionDialog({
             value.toLowerCase().includes(normalizedQuizQuery)
         )
     );
+    const highSimilarityQuestions = (similarQuestions ?? []).filter((question) => question.score >= 50);
 
     function handleOpenChange(nextOpen: boolean) {
         if (pending) {
@@ -114,6 +116,31 @@ export function CreateQuestionDialog({
         }
 
         onOpenChange(nextOpen);
+    }
+
+    function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+        if (highSimilarityQuestions.length === 0) {
+            return;
+        }
+
+        if (similarityConfirmationRef.current) {
+            similarityConfirmationRef.current = false;
+            return;
+        }
+
+        event.preventDefault();
+
+        const confirmed = window.confirm(
+            `${highSimilarityQuestions.length} question${highSimilarityQuestions.length === 1 ? "" : "s"} ` +
+            "look at least 50% similar. Create this question anyway?"
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        similarityConfirmationRef.current = true;
+        event.currentTarget.requestSubmit();
     }
 
     function addOption() {
@@ -176,7 +203,7 @@ export function CreateQuestionDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <form action={formAction} className="flex min-h-0 flex-1 flex-col gap-6">
+                <form action={formAction} onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-6">
                     {selectedConceptIds.map((conceptId) => (
                         <input key={`selected-concept-${conceptId}`} type="hidden" name="conceptIds[]" value={conceptId} />
                     ))}
