@@ -1,215 +1,244 @@
 import {
   ArrowRight,
-  BarChart3,
-  BookOpenCheck,
+  BookOpen,
   Brain,
-  CheckCircle2,
+  CalendarDays,
   ClipboardList,
-  Layers3,
+  LibraryBig,
   Trophy,
 } from "lucide-react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 
+import { getArticles } from "@/app/actions/article";
 import { Button } from "@/components/ui/button";
 
-const tracks = [
+const quickLinks = [
   {
     title: "Quizzes",
-    description: "Browse sets, answer questions, and keep practice focused.",
+    description: "Practice with focused question sets.",
     href: "/quiz",
     icon: ClipboardList,
   },
   {
-    title: "Concepts",
-    description: "Work through one topic area at a time.",
-    href: "/quiz",
-    icon: Layers3,
-  },
-  {
     title: "Ranks",
-    description: "Compare concept ratings from solved activity.",
+    description: "Track movement across concepts.",
     href: "/ranking",
     icon: Trophy,
   },
 ];
 
-const sessionRows = [
-  { label: "Data modeling", value: "84%", tone: "bg-primary" },
-  { label: "React state", value: "72%", tone: "bg-chart-2" },
-  { label: "SQL joins", value: "66%", tone: "bg-amber-500" },
-];
+function formatArticleDate(date: Date | null) {
+  if (!date) {
+    return "Unscheduled";
+  }
 
-export default function Home() {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+export default async function Home() {
+  const articles = await getArticles();
+  const recentArticles = articles.slice(0, 5);
+  const featuredArticle = recentArticles[0];
+  const supportingArticles = recentArticles.slice(1);
+
   return (
-    <main className="min-h-dvh bg-[linear-gradient(180deg,var(--background)_0%,var(--muted)_100%)] text-foreground">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2" aria-label="Pulth home">
-          <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Brain className="size-4" />
-          </span>
-          <span className="text-sm font-semibold tracking-wide">Pulth</span>
-        </Link>
+    <main className="min-h-dvh bg-background text-foreground">
+      <header className="border-b border-border bg-background/95">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <Link href="/" className="flex items-center gap-2" aria-label="Pulth home">
+            <span className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Brain className="size-4" />
+            </span>
+            <span className="text-sm font-semibold tracking-wide">Pulth</span>
+          </Link>
 
-        <div className="flex items-center gap-2">
-          <Show when="signed-out">
-            <Button asChild variant="ghost" size="lg">
-              <SignInButton>Sign in</SignInButton>
-            </Button>
-            <Button asChild size="lg">
-              <SignUpButton>Sign up</SignUpButton>
-            </Button>
-          </Show>
-          <Show when="signed-in">
-            <Button asChild variant="ghost" size="lg">
-              <Link href="/ranking">Ranks</Link>
-            </Button>
-            <Button asChild size="lg">
-              <Link href="/quiz">
-                Quizzes
-                <ArrowRight />
-              </Link>
-            </Button>
-            <UserButton />
-          </Show>
-        </div>
-      </header>
-
-      <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 pb-10 pt-8 sm:px-6 md:grid-cols-[1fr_0.88fr] md:pb-16 md:pt-14 lg:px-8">
-        <div className="max-w-2xl space-y-7">
-          <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-            <BookOpenCheck className="size-3.5 text-primary" />
-            Learn by questioning
-          </div>
-
-          <div className="space-y-5">
-            <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-normal text-balance sm:text-5xl lg:text-6xl">
-              Practice quizzes that turn answers into sharper concept ratings.
-            </h1>
-            <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-              Pulth keeps quiz solving, concept practice, and personal ranking in one focused workspace.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex items-center gap-2">
             <Show when="signed-out">
-              <Button asChild size="lg" className="h-10 px-4 text-sm">
-                <SignUpButton>Start practicing</SignUpButton>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="h-10 px-4 text-sm">
+              <Button asChild variant="ghost" size="lg">
                 <SignInButton>Sign in</SignInButton>
+              </Button>
+              <Button asChild size="lg">
+                <SignUpButton>Sign up</SignUpButton>
               </Button>
             </Show>
             <Show when="signed-in">
-              <Button asChild size="lg" className="h-10 px-4 text-sm">
+              <Button asChild variant="ghost" size="lg">
+                <Link href="/ranking">Ranks</Link>
+              </Button>
+              <Button asChild size="lg">
                 <Link href="/quiz">
-                  Open quizzes
+                  Quizzes
                   <ArrowRight />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="h-10 px-4 text-sm">
-                <Link href="/ranking">View ranks</Link>
-              </Button>
+              <UserButton />
             </Show>
           </div>
         </div>
+      </header>
 
-        <div className="relative min-h-[430px] overflow-hidden rounded-lg border border-border bg-background shadow-xl">
-          <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="size-2.5 rounded-full bg-red-400" />
-              <span className="size-2.5 rounded-full bg-amber-400" />
-              <span className="size-2.5 rounded-full bg-emerald-500" />
-            </div>
-            <span className="text-xs font-medium text-muted-foreground">Quiz session</span>
-          </div>
-
-          <div className="grid gap-4 p-4 sm:p-5">
-            <div className="rounded-md border border-border bg-card p-4">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                    Current prompt
-                  </p>
-                  <h2 className="mt-2 text-lg font-semibold leading-snug">
-                    Which index strategy best supports this query?
-                  </h2>
-                </div>
-                <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <CheckCircle2 className="size-5" />
-                </div>
+      <section className="border-b border-border bg-muted/40">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[0.78fr_1.22fr] md:py-14 lg:px-8">
+          <div className="flex max-w-xl flex-col justify-between gap-8">
+            <div className="space-y-6">
+              <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
+                <LibraryBig className="size-3.5 text-primary" />
+                Recent articles
               </div>
 
-              <div className="grid gap-2">
-                {["Composite index", "Sequential scan", "Hash aggregate"].map((item, index) => (
-                  <div
-                    key={item}
-                    className={
-                      index === 0
-                        ? "flex items-center justify-between rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
-                        : "flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground"
-                    }
-                  >
-                    <span>{item}</span>
-                    {index === 0 ? <CheckCircle2 className="size-4" /> : null}
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <h1 className="max-w-2xl text-4xl font-semibold leading-tight tracking-normal text-balance sm:text-5xl">
+                  Read the latest Pulth articles.
+                </h1>
+                <p className="max-w-lg text-base leading-7 text-muted-foreground">
+                  New explanations, concept notes, and practice material collected in one place before you jump into quizzes.
+                </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              {sessionRows.map((row) => (
-                <div key={row.label} className="rounded-md border border-border bg-card p-3">
-                  <p className="text-xs text-muted-foreground">{row.label}</p>
-                  <div className="mt-3 flex items-end justify-between gap-2">
-                    <span className="text-xl font-semibold">{row.value}</span>
-                    <span className={`h-8 w-2 rounded-full ${row.tone}`} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-md border border-border bg-card p-4">
-              <div className="mb-4 flex items-center gap-2">
-                <BarChart3 className="size-4 text-primary" />
-                <p className="text-sm font-medium">Concept movement</p>
-              </div>
-              <div className="flex h-28 items-end gap-2">
-                {[42, 58, 46, 74, 68, 88, 80].map((height, index) => (
-                  <span
-                    key={height + index}
-                    className="flex-1 rounded-t-md bg-primary/80"
-                    style={{ height: `${height}%` }}
-                  />
-                ))}
-              </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Show when="signed-out">
+                <Button asChild size="lg" className="h-10 px-4 text-sm">
+                  <SignUpButton>Start practicing</SignUpButton>
+                </Button>
+                <Button asChild variant="outline" size="lg" className="h-10 px-4 text-sm">
+                  <SignInButton>Sign in</SignInButton>
+                </Button>
+              </Show>
+              <Show when="signed-in">
+                <Button asChild size="lg" className="h-10 px-4 text-sm">
+                  <Link href="/quiz">
+                    Open quizzes
+                    <ArrowRight />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" size="lg" className="h-10 px-4 text-sm">
+                  <Link href="/ranking">View ranks</Link>
+                </Button>
+              </Show>
             </div>
           </div>
+
+          {featuredArticle ? (
+            <Link
+              href={`/articles/${featuredArticle.slug}`}
+              className="group grid min-h-[360px] overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-colors hover:border-primary/50"
+            >
+              <div className="flex min-h-36 items-end bg-[linear-gradient(135deg,var(--primary)_0%,var(--chart-2)_46%,var(--foreground)_100%)] p-5 text-primary-foreground">
+                <div className="flex size-12 items-center justify-center rounded-md bg-background/15">
+                  <BookOpen className="size-6" />
+                </div>
+              </div>
+              <div className="flex flex-col justify-between gap-8 p-5 sm:p-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <CalendarDays className="size-3.5" />
+                    <span>{formatArticleDate(featuredArticle.publishedAt ?? featuredArticle.createdAt)}</span>
+                  </div>
+                  <div className="space-y-3">
+                    <h2 className="text-2xl font-semibold leading-tight tracking-normal text-balance sm:text-3xl">
+                      {featuredArticle.title}
+                    </h2>
+                    <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">
+                      {featuredArticle.description}
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+                  Read article
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </Link>
+          ) : (
+            <div className="flex min-h-[360px] flex-col justify-between rounded-lg border border-dashed border-border bg-card p-6">
+              <div className="flex size-12 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                <BookOpen className="size-6" />
+              </div>
+              <div className="space-y-3">
+                <h2 className="text-2xl font-semibold tracking-normal">No articles published yet.</h2>
+                <p className="max-w-md text-sm leading-6 text-muted-foreground">
+                  Published articles will appear here automatically, newest first.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      <section className="border-t border-border bg-background/70">
-        <div className="mx-auto grid w-full max-w-6xl gap-3 px-4 py-6 sm:px-6 md:grid-cols-3 lg:px-8">
-          {tracks.map((track) => {
-            const Icon = track.icon;
+      <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1fr_18rem] md:py-12 lg:px-8">
+        <div className="space-y-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-normal">Recent articles</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Freshly published reading from Pulth.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {supportingArticles.length > 0 ? (
+              supportingArticles.map((article) => (
+                <Link
+                  key={article.id}
+                  href={`/articles/${article.slug}`}
+                  className="group grid gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-muted/30 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <CalendarDays className="size-3.5" />
+                      <span>{formatArticleDate(article.publishedAt ?? article.createdAt)}</span>
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-semibold leading-snug tracking-normal text-balance">
+                        {article.title}
+                      </h3>
+                      <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
+                        {article.description}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+                    Read
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
+                {featuredArticle
+                  ? "More articles will appear here as they are published."
+                  : "There are no published articles to show yet."}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <aside className="space-y-3">
+          {quickLinks.map((item) => {
+            const Icon = item.icon;
 
             return (
               <Link
-                key={track.title}
-                href={track.href}
-                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-muted/40"
+                key={item.title}
+                href={item.href}
+                className="group block rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-muted/30"
               >
-                <div className="mb-4 flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <div className="mb-5 flex size-9 items-center justify-center rounded-md bg-primary/10 text-primary">
                   <Icon className="size-4" />
                 </div>
                 <div className="space-y-1">
-                  <h2 className="text-sm font-semibold">{track.title}</h2>
-                  <p className="text-sm leading-6 text-muted-foreground">{track.description}</p>
+                  <h2 className="text-sm font-semibold">{item.title}</h2>
+                  <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
                 </div>
               </Link>
             );
           })}
-        </div>
+        </aside>
       </section>
 
       <footer className="border-t border-border bg-background">
