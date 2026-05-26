@@ -17,6 +17,7 @@ export default function QueryProvider({children, state}: ReactQueryProviderProps
       <HydrationBoundary state={state}>{children}</HydrationBoundary>
         {process.env.NODE_ENV === "development" ? (
             <ReactQueryDevtools buttonPosition="bottom-left" />
+            
         ) : null}
     </QueryClientProvider>
   );
