@@ -4,8 +4,16 @@ import {notFound, permanentRedirect} from "next/navigation";
 
 import {QuizSolver} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolver";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
-import {getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
+import {getAllConcepts, getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 import {getAbsoluteUrl} from "@/lib/site-url";
+
+export const revalidate = false;
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+    const concepts = await getAllConcepts();
+    return concepts.map(({slug}) => ({conceptId: slug}));
+}
 
 type SolveConceptPageProps = {
     params: Promise<{ conceptId: string }>;

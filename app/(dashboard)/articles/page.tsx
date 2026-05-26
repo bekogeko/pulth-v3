@@ -8,8 +8,8 @@ import {Button} from "@/components/ui/button";
 export const revalidate = false;
 
 export const metadata: Metadata = {
-    title: "Articles",
-    description: "Read published Pulth articles.",
+    title: "Articles | Pulth",
+    description: "Read published articles from Pulth — explanations, concept notes, and practice material across every topic.",
 };
 
 const dateFormatter = new Intl.DateTimeFormat("en", {

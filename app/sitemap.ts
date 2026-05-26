@@ -11,41 +11,34 @@ function route(path: string) {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    const now = new Date();
     const staticRoutes: MetadataRoute.Sitemap = [
         {
             url: route("/"),
-            lastModified: now,
             changeFrequency: "weekly",
             priority: 1,
         },
         {
             url: route("/quiz"),
-            lastModified: now,
             changeFrequency: "daily",
             priority: 0.9,
         },
         {
             url: route("/ranking"),
-            lastModified: now,
             changeFrequency: "daily",
             priority: 0.7,
         },
         {
             url: route("/articles"),
-            lastModified: now,
             changeFrequency: "weekly",
             priority: 0.7,
         },
         {
             url: route("/privacy"),
-            lastModified: now,
             changeFrequency: "yearly",
             priority: 0.4,
         },
         {
             url: route("/terms-of-service"),
-            lastModified: now,
             changeFrequency: "yearly",
             priority: 0.4,
         },

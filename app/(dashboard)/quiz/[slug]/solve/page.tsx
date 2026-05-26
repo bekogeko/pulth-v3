@@ -2,10 +2,18 @@ import type {Metadata} from "next";
 import {notFound} from "next/navigation";
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
 
-import {getQuestionsBySlug, getQuizBySlug} from "@/app/(dashboard)/quiz/quiz";
+import {getAllQuizzes, getQuestionsBySlug, getQuizBySlug} from "@/app/(dashboard)/quiz/quiz";
 import {QuizSolver} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolver";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {getAbsoluteUrl} from "@/lib/site-url";
+
+export const revalidate = false;
+export const dynamicParams = true;
+
+export async function generateStaticParams() {
+    const quizzes = await getAllQuizzes();
+    return quizzes.map(({slug}) => ({slug}));
+}
 
 type SolveQuizPageProps = {
     params: Promise<{ slug: string }>;

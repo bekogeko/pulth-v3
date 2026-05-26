@@ -8,6 +8,31 @@ import {getAbsoluteUrl} from "@/lib/site-url";
 export const revalidate = false;
 export const dynamicParams = true;
 
+type ArticleJsonLd = {
+    slug: string;
+    title: string;
+    description: string;
+    publishedAt: Date | null;
+    updatedAt: Date | null;
+};
+
+function createArticleJsonLd({slug, title, description, publishedAt, updatedAt}: ArticleJsonLd) {
+    return {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: title,
+        description,
+        url: getAbsoluteUrl(`/articles/${slug}`),
+        datePublished: publishedAt?.toISOString(),
+        dateModified: (updatedAt ?? publishedAt)?.toISOString(),
+        publisher: {
+            "@type": "Organization",
+            name: "Pulth",
+            url: getAbsoluteUrl("/"),
+        },
+    };
+}
+
 type ArticlePageProps = {
     params: Promise<{
         slug: string;
@@ -72,12 +97,17 @@ export default async function ArticlePage({params}: ArticlePageProps) {
     }
 
     return (
-        <ArticleRenderer
-            title={article.title}
-            description={article.description}
-            body={article.body}
-            concepts={article.concepts}
-            topics={article.topics}
-        />
+        <>
+            <script type="application/ld+json">
+                {JSON.stringify(createArticleJsonLd(article))}
+            </script>
+            <ArticleRenderer
+                title={article.title}
+                description={article.description}
+                body={article.body}
+                concepts={article.concepts}
+                topics={article.topics}
+            />
+        </>
     );
 }

@@ -1,6 +1,13 @@
+import type {Metadata} from "next";
+
 import {getAllQuizzes, getAllTopicsWithConcepts} from "@/app/(dashboard)/quiz/quiz";
 import {QuizList} from "@/app/(dashboard)/quiz/QuizList";
 import {TopicList} from "@/app/(dashboard)/quiz/TopicList";
+
+export const metadata: Metadata = {
+    title: "Quizzes | Pulth",
+    description: "Browse and practice quizzes across topics and concepts. Sharpen your knowledge one question at a time.",
+};
 
 type QuizPageProps = {
     searchParams: Promise<{

@@ -1,5 +1,11 @@
+import type {Metadata} from "next";
 import Link from "next/link";
 import {auth} from "@clerk/nextjs/server";
+
+export const metadata: Metadata = {
+    title: "Rankings | Pulth",
+    description: "See which concepts and topics are rated most difficult. Track ranking movement and find your weakest areas to practice.",
+};
 import {and, asc, countDistinct, desc, eq, sql} from "drizzle-orm";
 import {ArrowUpRight, BarChart3, ClipboardList, Flame, PlayCircle, Target, Trophy, Users} from "lucide-react";
 

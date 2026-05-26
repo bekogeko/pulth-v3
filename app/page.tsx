@@ -1,3 +1,4 @@
+import type {Metadata} from "next";
 import {
   ArrowRight,
   BookOpen,
@@ -9,6 +10,11 @@ import {
 } from "lucide-react";
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+    title: "Pulth — Independent Learning",
+    description: "Practice quizzes and read articles across any topic. Track your difficulty ratings and improve with targeted concept practice.",
+};
 
 import { getArticles } from "@/app/actions/article";
 import { Button } from "@/components/ui/button";
