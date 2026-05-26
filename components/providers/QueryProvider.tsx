@@ -2,6 +2,7 @@
 
 import {QueryClient, QueryClientProvider, HydrationBoundary, type DehydratedState} from "@tanstack/react-query";
 import {useState, type ReactNode} from "react";
+import {ReactQueryDevtools} from "@tanstack/react-query-devtools";
 
 type ReactQueryProviderProps = {
   children: ReactNode;
@@ -14,6 +15,9 @@ export default function QueryProvider({children, state}: ReactQueryProviderProps
   return (
     <QueryClientProvider client={queryClient}>
       <HydrationBoundary state={state}>{children}</HydrationBoundary>
+        {process.env.NODE_ENV === "development" ? (
+            <ReactQueryDevtools buttonPosition="bottom-left" />
+        ) : null}
     </QueryClientProvider>
   );
 }
