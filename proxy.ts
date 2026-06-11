@@ -5,6 +5,11 @@ const isProtectedRoute = createRouteMatcher([
     '/ranking/self(.*)',
     '/articles/self(.*)',
     '/articles/(.*)/edit',
+    // Authentication only: the admin role lives in Clerk private metadata,
+    // which is not in the session token, so the role check happens in
+    // lib/admin.ts (admin layout + every admin server action). Non-admins
+    // get a 404 from requireAdmin().
+    '/admin(.*)',
 ])
 
 export default clerkMiddleware(async (auth, request) => {

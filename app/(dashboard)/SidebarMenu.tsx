@@ -7,9 +7,13 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {BookOpen, CircleHelp, ClipboardList, Home, Trophy} from "lucide-react";
+import {BookOpen, CircleHelp, ClipboardList, Home, ShieldCheck, Trophy} from "lucide-react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
+import {useUser} from "@clerk/nextjs";
+import {useQuery} from "@tanstack/react-query";
+
+import {getIsAdmin} from "@/app/actions/admin";
 
 const sidebarLinks = [
     {
@@ -44,8 +48,29 @@ const sidebarLinks = [
     },
 ];
 
+const adminLink = {
+    title: "Admin",
+    href: "/admin",
+    icon: ShieldCheck,
+    isActive: (pathname: string) => pathname === "/admin" || pathname.startsWith("/admin/"),
+};
+
 export function CollapsibleMenu() {
     const pathname = usePathname()
+    const {isLoaded, isSignedIn} = useUser()
+
+    // The admin role lives in Clerk private metadata, which the browser can
+    // never read, so ask the server.
+    const {data: isAdmin} = useQuery({
+        queryKey: ["admin", "is-admin"],
+        queryFn: getIsAdmin,
+        enabled: isLoaded && isSignedIn,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const links = isAdmin
+        ? [...sidebarLinks, adminLink]
+        : sidebarLinks;
 
     return (
         <SidebarGroup>
@@ -54,7 +79,7 @@ export function CollapsibleMenu() {
             </SidebarGroupLabel>
             <SidebarGroupContent>
                 <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
-                    {sidebarLinks.map((item) => {
+                    {links.map((item) => {
                         const Icon = item.icon;
 
                         return (

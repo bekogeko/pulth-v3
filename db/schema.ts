@@ -191,3 +191,20 @@ export const questionConceptRatingTable=pgTable("question_concept_rating", {
 },(t)=>({
     questionConceptUnique: unique().on(t.questionId, t.conceptId),
 }))
+
+// New Curriculum
+
+export const curriculum = pgTable("curriculums", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    subjectId: integer().references(()=>subjectTable.id),
+    name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 255 }).notNull(),
+})
+
+export const curriculumTopic = pgTable("curriculumTopics", {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    curriculumId: integer().references(()=>curriculum.id),
+    name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 255 }).notNull(),
+    description: varchar({ length: 255 }).notNull(),
+})
