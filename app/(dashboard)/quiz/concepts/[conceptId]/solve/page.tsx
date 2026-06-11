@@ -2,7 +2,7 @@ import type {Metadata} from "next";
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
 import {notFound, permanentRedirect} from "next/navigation";
 
-import {QuizSolver} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolver";
+import {QuizSolver} from "@/app/(dashboard)/quiz/concepts/[conceptId]/solve/QuizSolver";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {getAllConcepts, getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 import {getAbsoluteUrl} from "@/lib/site-url";

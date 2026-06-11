@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { eq } from "drizzle-orm";
 
-import { articleTable, conceptTable, quizTable } from "@/db/schema";
+import { articleTable, conceptTable, topicTable } from "@/db/schema";
 import { database } from "@/lib/database";
 import { getAbsoluteUrl } from "@/lib/site-url";
 
@@ -45,8 +45,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
 
     try {
-        const [quizzes, concepts, articles] = await Promise.all([
-            database.select({ slug: quizTable.slug }).from(quizTable),
+        const [topics, concepts, articles] = await Promise.all([
+            database.select({ slug: topicTable.slug }).from(topicTable),
             database.select({ slug: conceptTable.slug }).from(conceptTable),
             database
                 .select({
@@ -61,8 +61,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
         return [
             ...staticRoutes,
-            ...quizzes.map(({ slug }) => ({
-                url: route(`/quiz/${slug}/solve`),
+            ...topics.map(({ slug }) => ({
+                url: route(`/quiz/${slug}`),
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
             })),

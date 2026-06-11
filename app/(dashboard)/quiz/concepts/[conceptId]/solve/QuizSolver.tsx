@@ -9,13 +9,11 @@ import {
     getConceptById,
     getQuestionConceptRatings,
     getQuestionsByConceptId,
-    getQuestionsBySlug,
-    getQuizBySlug,
     submitUserAnswer
 } from "@/app/(dashboard)/quiz/quiz";
 import type {QuestionConceptRating} from "@/app/(dashboard)/quiz/quiz";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
-import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/[slug]/solve/QuizSolveSkeleton";
+import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/concepts/[conceptId]/solve/QuizSolveSkeleton";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";
@@ -24,15 +22,7 @@ import {Skeleton} from "@/components/ui/skeleton";
 import {cn} from "@/lib/utils";
 
 type QuizSolverProps = {
-    slug?: string;
-    conceptId?: number;
-};
-
-type SolverSource = {
-    id: number;
-    title?: string;
-    name?: string;
-    description: string | null;
+    conceptId: number;
 };
 
 type RatingSnapshot = {
@@ -49,7 +39,7 @@ function slugifyQuestion(value: string) {
         .slice(0, 80) || "question";
 }
 
-export function QuizSolver({slug, conceptId}: QuizSolverProps) {
+export function QuizSolver({conceptId}: QuizSolverProps) {
     const queryClient = useQueryClient();
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
     const [checkedQuestions, setCheckedQuestions] = useState<Record<number, boolean>>({});
@@ -57,19 +47,15 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [isComplete, setIsComplete] = useState(false);
     const [hasProcessedInitialHash, setHasProcessedInitialHash] = useState(false);
-    const isConceptMode = typeof conceptId === "number";
-    const sourceLabel = isConceptMode ? "Concept" : "Quiz";
 
-    const {data: sourceData, isLoading: isSourceLoading} = useQuery<SolverSource[]>({
-        queryKey: isConceptMode ? ["concept", conceptId] : ["quiz", slug],
-        queryFn: () => isConceptMode ? getConceptById(conceptId) : getQuizBySlug(slug!),
-        enabled: isConceptMode || Boolean(slug),
+    const {data: conceptData, isLoading: isConceptLoading} = useQuery({
+        queryKey: ["concept", conceptId],
+        queryFn: () => getConceptById(conceptId),
     });
 
     const {data: questions, isLoading, isError} = useQuery({
-        queryKey: isConceptMode ? ["concept", conceptId, "questions"] : ["quiz", slug, "questions"],
-        queryFn: () => isConceptMode ? getQuestionsByConceptId(conceptId) : getQuestionsBySlug(slug!),
-        enabled: isConceptMode || Boolean(slug),
+        queryKey: ["concept", conceptId, "questions"],
+        queryFn: () => getQuestionsByConceptId(conceptId),
     });
 
     const questionIds = useMemo(
@@ -82,8 +68,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
         enabled: questionIds.length > 0,
     });
 
-    const source = sourceData?.[0];
-    const title = source?.title ?? source?.name;
+    const concept = conceptData?.[0];
     const lastQuestionIndex = Math.max((questions?.length ?? 1) - 1, 0);
     const activeQuestionIndex = Math.min(currentQuestionIndex, lastQuestionIndex);
     const currentQuestion = questions?.[activeQuestionIndex];
@@ -254,7 +239,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
         setIsComplete(false);
     }
 
-    if (isSourceLoading || isLoading) {
+    if (isConceptLoading || isLoading) {
         return <QuizSolveSkeleton withPagePadding={false} />;
     }
 
@@ -264,7 +249,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                 <CardHeader className="gap-4 border-b border-border/60 bg-gradient-to-br from-primary/8 via-background to-background">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="space-y-2">
-                            {isSourceLoading ? (
+                            {isConceptLoading ? (
                                 <>
                                     <Skeleton className="h-8 w-52" />
                                     <Skeleton className="h-4 w-80 max-w-full" />
@@ -272,10 +257,10 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                             ) : (
                                 <>
                                     <h1 className="text-2xl font-semibold leading-none tracking-tight">
-                                        {title ?? sourceLabel}
+                                        {concept?.name ?? "Concept"}
                                     </h1>
                                     <CardDescription className="max-w-2xl text-sm leading-6">
-                                        {source?.description ?? "Choose one answer for each question."}
+                                        {concept?.description ?? "Choose one answer for each question."}
                                     </CardDescription>
                                 </>
                             )}
@@ -295,7 +280,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                         {questions?.length ?? 0} questions
                     </span>
                     <span className="rounded-full bg-muted px-3 py-1">
-                        {isConceptMode ? "Concept practice" : "One at a time"}
+                        Concept practice
                     </span>
                     {questions?.length ? (
                         <span className="rounded-full bg-muted px-3 py-1">
@@ -519,7 +504,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
             {isError ? (
                 <Card className="border-destructive/30">
                     <CardHeader>
-                        <CardTitle>Couldn&apos;t load this quiz</CardTitle>
+                        <CardTitle>Couldn&apos;t load this concept practice</CardTitle>
                         <CardDescription>
                             Please refresh and try again.
                         </CardDescription>
@@ -532,9 +517,7 @@ export function QuizSolver({slug, conceptId}: QuizSolverProps) {
                     <CardHeader>
                         <CardTitle>No questions yet</CardTitle>
                         <CardDescription>
-                            {isConceptMode
-                                ? "Attach questions to this concept and they&apos;ll appear here."
-                                : "Add questions to this quiz and they&apos;ll appear here."}
+                            Attach questions to this concept and they&apos;ll appear here.
                         </CardDescription>
                     </CardHeader>
                 </Card>

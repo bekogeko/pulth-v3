@@ -427,7 +427,7 @@ export async function getSimilarQuestions(input: {
     }));
 }
 
-export async function getAllTopicsWithConcepts() {
+function selectTopicsWithConcepts(topicSlug?: string) {
     type TopicConceptJson = ConceptJson & {
         slug: string;
         questionCount: number;
@@ -468,8 +468,17 @@ export async function getAllTopicsWithConcepts() {
         .leftJoin(topicConceptsTable, eq(topicTable.id, topicConceptsTable.topicId))
         .leftJoin(conceptTable, eq(topicConceptsTable.conceptId, conceptTable.id))
         .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
+        .where(topicSlug === undefined ? undefined : eq(topicTable.slug, topicSlug))
         .groupBy(topicTable.id)
         .orderBy(asc(topicTable.title));
+}
+
+export async function getAllTopicsWithConcepts() {
+    return selectTopicsWithConcepts();
+}
+
+export async function getTopicWithConceptsBySlug(slug: string) {
+    return selectTopicsWithConcepts(slug);
 }
 
 export async function getMyQuestions() {
@@ -1075,13 +1084,6 @@ export async function getQuestionConceptRatings(questionIds: number[]): Promise<
         .orderBy(asc(questionConceptsTable.questionId), asc(conceptTable.name));
 }
 
-export async function getQuizBySlug(slug: string) {
-    return database
-        .select()
-        .from(quizTable)
-        .where(eq(quizTable.slug, slug));
-}
-
 export async function getConceptById(conceptId: number) {
     if (!Number.isInteger(conceptId)) {
         return [];
@@ -1106,51 +1108,6 @@ export async function getConceptByIdentifier(identifier: string) {
     }
 
     return getConceptBySlug(identifier);
-}
-
-export async function getQuestionsBySlug(slug: string) {
-    const quiz = await database
-        .select({id: quizTable.id})
-        .from(quizTable)
-        .where(eq(quizTable.slug, slug))
-        .limit(1)
-        .then((results) => results[0]);
-
-    if (!quiz) {
-        throw new Error("Quiz not found");
-    }
-
-    return database
-        .select({
-            quizId: quizQuestionTable.quizId,
-            questionId: quizQuestionTable.questionId,
-            question: questionTable.question,
-            body: questionTable.body,
-            options: sql<QuestionOptionJson[]>`
-                coalesce(
-                    json_agg(
-                        json_build_object(
-                            'id', ${questionOptionTable.id},
-                            'option', ${questionOptionTable.option},
-                            'isCorrect', ${questionOptionTable.isCorrect}
-                        )
-                        order by ${questionOptionTable.id}
-                    ) filter (where ${questionOptionTable.id} is not null),
-                    '[]'::json
-                )
-            `,
-        })
-        .from(quizQuestionTable)
-        .innerJoin(questionTable, eq(questionTable.id, quizQuestionTable.questionId))
-        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
-        .where(eq(quizQuestionTable.quizId, quiz.id))
-        .groupBy(
-            quizQuestionTable.quizId,
-            quizQuestionTable.questionId,
-            questionTable.id,
-            questionTable.question,
-            questionTable.body
-        );
 }
 
 export async function getQuestionsByConceptId(conceptId: number) {
