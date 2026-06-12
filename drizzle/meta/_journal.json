@@ -127,6 +127,13 @@
       "when": 1778496000000,
       "tag": "0017_enable_pg_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1781288396763,
+      "tag": "0018_fresh_mariko_yashida",
+      "breakpoints": true
     }
   ]
 }

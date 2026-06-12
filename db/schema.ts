@@ -16,12 +16,6 @@ import {sql} from "drizzle-orm";
 import type {EditorJsOutput} from "@/schemas/EditorTypes";
 
 
-export const quizTable = pgTable("quizzes", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    title: varchar({ length: 255 }).notNull(),
-    description: varchar({ length: 255 }).notNull(),
-    slug: varchar({ length: 127 }).unique().notNull(),
-});
 
 export const articleTable = pgTable("articles", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -57,16 +51,24 @@ export const questionTable = pgTable("questions", {
     ownerId: varchar({length:255}).notNull(),
 })
 
-export const quizQuestionTable = pgTable("quiz_questions", {
-    quizId: integer().references(()=>quizTable.id,{
-        onDelete: "cascade"
-    }).notNull(),
-    questionId: integer().references(()=>questionTable.id,{
-        onDelete: "cascade"
-    }).notNull(),
-},(t)=>({
-    pk:primaryKey({columns:[t.quizId,t.questionId]}),
-}))
+//
+// export const quizTable = pgTable("quizzes", {
+//     id: integer().primaryKey().generatedAlwaysAsIdentity(),
+//     title: varchar({ length: 255 }).notNull(),
+//     description: varchar({ length: 255 }).notNull(),
+//     slug: varchar({ length: 127 }).unique().notNull(),
+// });
+//
+// export const quizQuestionTable = pgTable("quiz_questions", {
+//     quizId: integer().references(()=>quizTable.id,{
+//         onDelete: "cascade"
+//     }).notNull(),
+//     questionId: integer().references(()=>questionTable.id,{
+//         onDelete: "cascade"
+//     }).notNull(),
+// },(t)=>({
+//     pk:primaryKey({columns:[t.quizId,t.questionId]}),
+// }))
 
 export const questionOptionTable = pgTable("question_options", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
