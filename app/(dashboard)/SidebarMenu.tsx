@@ -7,7 +7,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {BookOpen, CircleHelp, ClipboardList, Home, ShieldCheck, Trophy} from "lucide-react";
+import {BookOpen, CircleHelp, ClipboardList, Home, Library, ShieldCheck, Trophy} from "lucide-react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {useUser} from "@clerk/nextjs";
@@ -21,6 +21,12 @@ const sidebarLinks = [
         href: "/",
         icon: Home,
         isActive: (pathname: string) => pathname === "/",
+    },
+    {
+        title: "Subjects",
+        href: "/subjects",
+        icon: Library,
+        isActive: (pathname: string) => pathname === "/subjects" || pathname.startsWith("/subjects/"),
     },
     {
         title: "Practice",
