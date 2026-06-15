@@ -27,19 +27,12 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@/components/ui/tooltip";
-import {EditQuizzesDialog} from "@/app/(dashboard)/quiz/self/edit-quizzes-dialog";
 import {deleteQuestion} from "@/app/(dashboard)/quiz/quiz";
 
 export type Question = {
     id: number;
     question: string;
     body: string | null;
-    quizzes: {
-        id: number;
-        title: string;
-        description: string;
-        slug?: string;
-    }[];
     options: {
         id: number;
         option: string;
@@ -69,11 +62,6 @@ export const columns: ColumnDef<Question>[] = [
     {
         accessorKey: "question",
         header: "Question",
-    },
-    {
-        accessorKey: "quizzes",
-        accessorFn: (question) => question.quizzes.map((quiz) => quiz.title).join(", "),
-        header: "Quizzes",
     },
     {
         accessorKey: "options",
@@ -132,7 +120,6 @@ function RowActions({question}: { question: Question }) {
     const queryClient = useQueryClient();
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false);
-    const [isQuizzesDialogOpen, setIsQuizzesDialogOpen] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
     const deleteQuestionMutation = useMutation({
@@ -143,11 +130,7 @@ function RowActions({question}: { question: Question }) {
                 return;
             }
 
-            await Promise.all([
-                queryClient.invalidateQueries({queryKey: ["quizzes"]}),
-                queryClient.invalidateQueries({queryKey: ["quizzes", "self"]}),
-                queryClient.invalidateQueries({queryKey: ["quiz"]}),
-            ]);
+            await queryClient.invalidateQueries({queryKey: ["quizzes", "self"]});
 
             toast.success(result.message);
             setIsDeleteDialogOpen(false);
@@ -169,9 +152,7 @@ function RowActions({question}: { question: Question }) {
                 <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
                     <DropdownMenuSeparator/>
-                    <DropdownMenuItem onSelect={() => setIsQuizzesDialogOpen(true)}>
-                        Edit Quizzes
-                    </DropdownMenuItem><DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
+                    <DropdownMenuItem onSelect={() => setIsEditDialogOpen(true)}>
                         Edit Concepts
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setIsOptionDialogOpen(true)}>
@@ -210,23 +191,12 @@ function RowActions({question}: { question: Question }) {
                 />
             ) : null}
 
-            {isQuizzesDialogOpen ? (
-                <EditQuizzesDialog
-                    open={isQuizzesDialogOpen}
-                    onOpenChange={setIsQuizzesDialogOpen}
-                    question={question.question}
-                    body={question.body}
-                    questionId={question.id}
-                    quizzes={question.quizzes}
-                />
-            ) : null}
-
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Delete question?</DialogTitle>
                         <DialogDescription>
-                            This will remove the question, its answer choices, concept links, and quiz links.
+                            This will remove the question, its answer choices, and concept links.
                         </DialogDescription>
                     </DialogHeader>
 

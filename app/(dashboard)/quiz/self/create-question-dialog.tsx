@@ -5,7 +5,7 @@ import {useQuery, useQueryClient} from "@tanstack/react-query";
 import {Loader2, Plus, Search, Trash2} from "lucide-react";
 import {toast} from "sonner";
 
-import {createQuestion, getAllConcepts, getAllQuizzes, getSimilarQuestions} from "@/app/(dashboard)/quiz/quiz";
+import {createQuestion, getAllConcepts, getSimilarQuestions} from "@/app/(dashboard)/quiz/quiz";
 import {Button} from "@/components/ui/button";
 import {
     Dialog,
@@ -41,11 +41,8 @@ export function CreateQuestionDialog({
     const [body, setBody] = useState("");
     const [correctIndex, setCorrectIndex] = useState(0);
     const [conceptQuery, setConceptQuery] = useState("");
-    const [quizQuery, setQuizQuery] = useState("");
     const [selectedConceptIds, setSelectedConceptIds] = useState<number[]>([]);
-    const [selectedQuizIds, setSelectedQuizIds] = useState<number[]>([]);
     const deferredConceptQuery = useDeferredValue(conceptQuery);
-    const deferredQuizQuery = useDeferredValue(quizQuery);
     const deferredPrompt = useDeferredValue(prompt);
     const deferredBody = useDeferredValue(body);
     const deferredOptions = useDeferredValue(options);
@@ -58,12 +55,6 @@ export function CreateQuestionDialog({
     const {data: concepts, isLoading: conceptsLoading} = useQuery({
         queryKey: ["concepts"],
         queryFn: getAllConcepts,
-        enabled: open,
-    });
-
-    const {data: quizzes, isLoading: quizzesLoading} = useQuery({
-        queryKey: ["quizzes"],
-        queryFn: getAllQuizzes,
         enabled: open,
     });
 
@@ -88,25 +79,15 @@ export function CreateQuestionDialog({
             return;
         }
 
-        void Promise.all([
-            queryClient.invalidateQueries({queryKey: ["quizzes", "self"]}),
-            queryClient.invalidateQueries({queryKey: ["quizzes"]}),
-            queryClient.invalidateQueries({queryKey: ["quiz"]}),
-        ]).then(() => {
+        void queryClient.invalidateQueries({queryKey: ["quizzes", "self"]}).then(() => {
             toast.success(state.message ?? "Question created.");
             onOpenChange(false);
         });
     }, [onOpenChange, queryClient, state.message, state.status]);
 
     const normalizedConceptQuery = deferredConceptQuery.trim().toLowerCase();
-    const normalizedQuizQuery = deferredQuizQuery.trim().toLowerCase();
     const filteredConcepts = (concepts ?? []).filter((concept) =>
         concept.name.toLowerCase().includes(normalizedConceptQuery)
-    );
-    const filteredQuizzes = (quizzes ?? []).filter((quiz) =>
-        [quiz.title, quiz.description, quiz.slug].some((value) =>
-            value.toLowerCase().includes(normalizedQuizQuery)
-        )
     );
     const highSimilarityQuestions = (similarQuestions ?? []).filter((question) => question.score >= 50);
 
@@ -180,16 +161,6 @@ export function CreateQuestionDialog({
         });
     }
 
-    function toggleQuiz(quizId: number) {
-        setSelectedQuizIds((currentQuizIds) => {
-            if (currentQuizIds.includes(quizId)) {
-                return currentQuizIds.filter((id) => id !== quizId);
-            }
-
-            return [...currentQuizIds, quizId];
-        });
-    }
-
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
@@ -199,7 +170,7 @@ export function CreateQuestionDialog({
                 <DialogHeader>
                     <DialogTitle>Create Question</DialogTitle>
                     <DialogDescription>
-                        Add the prompt, answer choices, concepts, and quiz attachments in one pass.
+                        Add the prompt, answer choices, and concepts in one pass.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -207,14 +178,10 @@ export function CreateQuestionDialog({
                     {selectedConceptIds.map((conceptId) => (
                         <input key={`selected-concept-${conceptId}`} type="hidden" name="conceptIds[]" value={conceptId} />
                     ))}
-                    {selectedQuizIds.map((quizId) => (
-                        <input key={`selected-quiz-${quizId}`} type="hidden" name="quizIds[]" value={quizId} />
-                    ))}
 
                     <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
                         <span>{options.length} option{options.length === 1 ? "" : "s"}</span>
                         <span>{selectedConceptIds.length} concept{selectedConceptIds.length === 1 ? "" : "s"} linked</span>
-                        <span>{selectedQuizIds.length} quiz{selectedQuizIds.length === 1 ? "" : "zes"} attached</span>
                     </div>
 
                     <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto pr-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -357,74 +324,6 @@ export function CreateQuestionDialog({
                                 )}
                             </section>
 
-                            <section className="space-y-4 rounded-xl border border-border/70 bg-muted/10 p-4">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                        <p className="text-sm font-medium">Quiz attachments</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Attach the question anywhere it should appear right away.
-                                        </p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">
-                                        {selectedQuizIds.length} selected
-                                    </p>
-                                </div>
-
-                                <Input
-                                    value={quizQuery}
-                                    onChange={(event) => setQuizQuery(event.target.value)}
-                                    placeholder="Search quizzes..."
-                                    aria-label="Search quizzes"
-                                />
-
-                                {quizzesLoading ? (
-                                    <p className="text-sm text-muted-foreground">Loading quizzes...</p>
-                                ) : filteredQuizzes.length ? (
-                                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                                        {filteredQuizzes.map((quiz) => {
-                                            const questionCount = Number(quiz.questionCount);
-                                            const hasQuestionCount = Number.isFinite(questionCount);
-
-                                            return (
-                                                <label
-                                                    key={quiz.id}
-                                                    className="flex cursor-pointer items-start gap-3 rounded-md border border-border/70 px-3 py-3 transition-colors hover:bg-muted/40"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedQuizIds.includes(quiz.id)}
-                                                        onChange={() => toggleQuiz(quiz.id)}
-                                                        className="mt-1 h-4 w-4 rounded border border-input text-primary focus:ring-2 focus:ring-ring/30"
-                                                    />
-                                                    <div className="min-w-0 flex-1 space-y-1">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="text-sm font-medium text-foreground">
-                                                                {quiz.title}
-                                                            </span>
-                                                            {hasQuestionCount ? (
-                                                                <span className="rounded-full bg-background px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                                                                    {questionCount} question{questionCount === 1 ? "" : "s"}
-                                                                </span>
-                                                            ) : null}
-                                                        </div>
-                                                        <p className="text-sm text-muted-foreground">
-                                                            {quiz.description || "No description provided."}
-                                                        </p>
-                                                    </div>
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
-                                ) : quizzes?.length ? (
-                                    <p className="text-sm text-muted-foreground">
-                                        No quizzes match your search.
-                                    </p>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground">
-                                        No quizzes are available yet. You can still create the question and attach it later.
-                                    </p>
-                                )}
-                            </section>
                         </div>
                     </div>
 
@@ -527,7 +426,6 @@ function SimilarQuestionsPanel({
                         .filter((option) => Number(option.score ?? 0) >= 18)
                         .sort((leftOption, rightOption) => Number(rightOption.score ?? 0) - Number(leftOption.score ?? 0))
                         .slice(0, 3);
-                    const quizTitles = question.quizzes.map((quiz) => quiz.title).join(", ");
 
                     return (
                         <div key={question.id} className="rounded-md border border-border/70 bg-background px-3 py-2">
@@ -535,11 +433,6 @@ function SimilarQuestionsPanel({
                                 <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
                                     {question.score}% similar
                                 </span>
-                                {quizTitles ? (
-                                    <span className="min-w-0 truncate text-[0.7rem] text-muted-foreground">
-                                        {quizTitles}
-                                    </span>
-                                ) : null}
                             </div>
                             <p className="mt-1 text-sm font-medium text-foreground">
                                 {question.question}

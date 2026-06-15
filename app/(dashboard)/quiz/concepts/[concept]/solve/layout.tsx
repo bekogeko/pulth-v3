@@ -26,3 +26,5 @@ export default async function SolveConceptLayout({children, params}: SolveConcep
 
     return children;
 }
+
+admin panel for curriculumTopic. Should be able to add Topics to existing curriculums. Should be able to attach concepts in curriculumTopic_concepts.

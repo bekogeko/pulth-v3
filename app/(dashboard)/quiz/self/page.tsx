@@ -24,7 +24,7 @@ export default function Quiz() {
                 <div className="space-y-1">
                     <h2 className="text-lg font-semibold">My Questions</h2>
                     <p className="text-sm text-muted-foreground">
-                        Create questions, manage answer choices, and attach them to concepts or quizzes from one place.
+                        Create questions, manage answer choices, and attach them to concepts from one place.
                     </p>
                 </div>
                 <Button type="button" onClick={() => setIsCreateDialogOpen(true)}>

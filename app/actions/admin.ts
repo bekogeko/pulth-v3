@@ -30,6 +30,7 @@ const NOT_AUTHORIZED: AdminMutationState = {
 
 const CONCEPT_SLUG_MAX_LENGTH = 255;
 const TOPIC_SLUG_MAX_LENGTH = 127;
+const SUBJECT_SLUG_MAX_LENGTH = 255;
 const SLUG_SUFFIX_RESERVE = 8;
 
 function slugify(input: string, maxLength: number) {
@@ -570,6 +571,18 @@ export async function deleteTopic(topicId: number): Promise<AdminMutationState> 
 
 // --- Subjects ---
 
+async function subjectSlugExists(candidate: string, excludeId?: number) {
+    const [existing] = await database
+        .select({id: subjectTable.id})
+        .from(subjectTable)
+        .where(excludeId === undefined
+            ? eq(subjectTable.slug, candidate)
+            : and(eq(subjectTable.slug, candidate), ne(subjectTable.id, excludeId)))
+        .limit(1);
+
+    return Boolean(existing);
+}
+
 export async function getAdminSubjects() {
     if (!(await isAdmin())) {
         return [];
@@ -611,8 +624,15 @@ export async function createSubject(input: {name: string}): Promise<AdminMutatio
         return validationError;
     }
 
+    const slug = await createUniqueSlug({
+        title: name,
+        maxLength: SUBJECT_SLUG_MAX_LENGTH,
+        fallback: "subject",
+        exists: (candidate) => subjectSlugExists(candidate),
+    });
+
     try {
-        await database.insert(subjectTable).values({name});
+        await database.insert(subjectTable).values({name, slug});
 
         return {status: "success", message: "Subject created."};
     } catch {
@@ -632,16 +652,32 @@ export async function updateSubject(input: {id: number; name: string}): Promise<
         return validationError;
     }
 
-    try {
-        const updated = await database
-            .update(subjectTable)
-            .set({name})
-            .where(eq(subjectTable.id, input.id))
-            .returning({id: subjectTable.id});
+    const [subject] = await database
+        .select({
+            id: subjectTable.id,
+            name: subjectTable.name,
+            slug: subjectTable.slug,
+        })
+        .from(subjectTable)
+        .where(eq(subjectTable.id, input.id))
+        .limit(1);
 
-        if (updated.length === 0) {
-            return {status: "error", message: "Subject not found."};
-        }
+    if (!subject) {
+        return {status: "error", message: "Subject not found."};
+    }
+
+    const slug = name === subject.name ? subject.slug : await createUniqueSlug({
+        title: name,
+        maxLength: SUBJECT_SLUG_MAX_LENGTH,
+        fallback: "subject",
+        exists: (candidate) => subjectSlugExists(candidate, subject.id),
+    });
+
+    try {
+        await database
+            .update(subjectTable)
+            .set({name, slug})
+            .where(eq(subjectTable.id, subject.id));
 
         return {status: "success", message: "Subject updated."};
     } catch {

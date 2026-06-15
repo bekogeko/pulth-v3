@@ -37,29 +37,20 @@ type Concept = {
     name: string;
 }
 
-type Quiz = {
-    id: number;
-    title: string;
-}
-
 type ConceptFilterMode = "and" | "or"
-type QuizStatusFilter = "all" | "quizzed" | "non-quizzed"
 
-interface DataTableProps<TData extends { concepts: Concept[]; quizzes: Quiz[] }, TValue> {
+interface DataTableProps<TData extends { concepts: Concept[] }, TValue> {
     columns: ColumnDef<TData, TValue>[]
     data: TData[]
 }
 
-export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }, TValue>({
-                                                                                               columns,
-                                                                                               data,
-                                                                                           }: DataTableProps<TData, TValue>) {
+export function DataTable<TData extends { concepts: Concept[] }, TValue>({
+                                                                             columns,
+                                                                             data,
+                                                                         }: DataTableProps<TData, TValue>) {
     const [selectedConceptIds, setSelectedConceptIds] = useState<number[]>([])
     const [conceptFilterMode, setConceptFilterMode] = useState<ConceptFilterMode>("or")
     const [conceptQuery, setConceptQuery] = useState("")
-    const [selectedQuizIds, setSelectedQuizIds] = useState<number[]>([])
-    const [quizStatusFilter, setQuizStatusFilter] = useState<QuizStatusFilter>("all")
-    const [quizQuery, setQuizQuery] = useState("")
     const [pagination, setPagination] = useState<PaginationState>({
         pageIndex: 0,
         pageSize: 10,
@@ -68,9 +59,6 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
     const deferredSelectedConceptIds = useDeferredValue(selectedConceptIds)
     const deferredConceptFilterMode = useDeferredValue(conceptFilterMode)
     const deferredConceptQuery = useDeferredValue(conceptQuery)
-    const deferredSelectedQuizIds = useDeferredValue(selectedQuizIds)
-    const deferredQuizStatusFilter = useDeferredValue(quizStatusFilter)
-    const deferredQuizQuery = useDeferredValue(quizQuery)
 
     const conceptOptions = useMemo(() => {
         const conceptsById = new Map<number, Concept>()
@@ -84,76 +72,34 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
         return [...conceptsById.values()].sort((left, right) => left.name.localeCompare(right.name))
     }, [data])
 
-    const quizOptions = useMemo(() => {
-        const quizzesById = new Map<number, Quiz>()
-
-        for (const row of data) {
-            for (const quiz of row.quizzes) {
-                quizzesById.set(quiz.id, quiz)
-            }
-        }
-
-        return [...quizzesById.values()].sort((left, right) => left.title.localeCompare(right.title))
-    }, [data])
-
     const selectedConceptIdSet = useMemo(
         () => new Set(selectedConceptIds),
         [selectedConceptIds]
-    )
-
-    const selectedQuizIdSet = useMemo(
-        () => new Set(selectedQuizIds),
-        [selectedQuizIds]
     )
 
     const rowsWithConceptIdSets = useMemo(() => (
         data.map((row) => ({
             row,
             conceptIdSet: new Set(row.concepts.map((concept) => concept.id)),
-            quizIdSet: new Set(row.quizzes.map((quiz) => quiz.id)),
         }))
     ), [data])
 
     const filteredData = useMemo(() => {
-        if (
-            !deferredSelectedConceptIds.length
-            && !deferredSelectedQuizIds.length
-            && deferredQuizStatusFilter === "all"
-        ) {
+        if (!deferredSelectedConceptIds.length) {
             return data
         }
 
         return rowsWithConceptIdSets
-            .filter(({conceptIdSet, quizIdSet}) => {
-                const matchesConcepts = !deferredSelectedConceptIds.length || (
-                    deferredConceptFilterMode === "and"
-                        ? deferredSelectedConceptIds.every((conceptId) => conceptIdSet.has(conceptId))
-                        : deferredSelectedConceptIds.some((conceptId) => conceptIdSet.has(conceptId))
-                )
-
-                const matchesQuizzes = !deferredSelectedQuizIds.length || (
-                    deferredSelectedQuizIds.some((quizId) => quizIdSet.has(quizId))
-                )
-
-                const matchesQuizStatus = deferredQuizStatusFilter === "all" || (
-                    deferredQuizStatusFilter === "quizzed"
-                        ? quizIdSet.size > 0
-                        : quizIdSet.size === 0
-                )
-
-                if (!matchesConcepts) {
-                    return false
-                }
-
-                return matchesQuizzes && matchesQuizStatus
-            })
+            .filter(({conceptIdSet}) => (
+                deferredConceptFilterMode === "and"
+                    ? deferredSelectedConceptIds.every((conceptId) => conceptIdSet.has(conceptId))
+                    : deferredSelectedConceptIds.some((conceptId) => conceptIdSet.has(conceptId))
+            ))
             .map(({row}) => row)
     }, [
         data,
         deferredConceptFilterMode,
-        deferredQuizStatusFilter,
         deferredSelectedConceptIds,
-        deferredSelectedQuizIds,
         rowsWithConceptIdSets,
     ])
 
@@ -162,20 +108,10 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
         [conceptOptions, selectedConceptIdSet]
     )
 
-    const selectedQuizzes = useMemo(
-        () => quizOptions.filter((quiz) => selectedQuizIdSet.has(quiz.id)),
-        [quizOptions, selectedQuizIdSet]
-    )
-
     const normalizedConceptQuery = deferredConceptQuery.trim().toLowerCase()
     const filteredConceptOptions = useMemo(() => (
         conceptOptions.filter((concept) => concept.name.toLowerCase().includes(normalizedConceptQuery))
     ), [conceptOptions, normalizedConceptQuery])
-
-    const normalizedQuizQuery = deferredQuizQuery.trim().toLowerCase()
-    const filteredQuizOptions = useMemo(() => (
-        quizOptions.filter((quiz) => quiz.title.toLowerCase().includes(normalizedQuizQuery))
-    ), [normalizedQuizQuery, quizOptions])
 
     useEffect(() => {
         setPagination((currentPagination) => (
@@ -183,7 +119,7 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
                 ? currentPagination
                 : {...currentPagination, pageIndex: 0}
         ))
-    }, [deferredConceptFilterMode, deferredQuizStatusFilter, deferredSelectedConceptIds, deferredSelectedQuizIds])
+    }, [deferredConceptFilterMode, deferredSelectedConceptIds])
 
     const table = useReactTable({
         data: filteredData,
@@ -213,27 +149,6 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
     function clearConceptFilters() {
         setSelectedConceptIds([])
         setConceptQuery("")
-    }
-
-    function toggleQuizFilter(quizId: number) {
-        setSelectedQuizIds((currentQuizIds) => {
-            if (currentQuizIds.includes(quizId)) {
-                return currentQuizIds.filter((currentQuizId) => currentQuizId !== quizId)
-            }
-
-            return [...currentQuizIds, quizId]
-        })
-    }
-
-    function clearQuizFilters() {
-        setSelectedQuizIds([])
-        setQuizStatusFilter("all")
-        setQuizQuery("")
-    }
-
-    function clearAllFilters() {
-        clearConceptFilters()
-        clearQuizFilters()
     }
 
     return (
@@ -298,69 +213,11 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
                                 </div>
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    className="w-full justify-between rounded-lg sm:w-auto"
-                                    disabled={!quizOptions.length}
-                                >
-                                    {selectedQuizIds.length
-                                        ? `${selectedQuizIds.length} quiz filter${selectedQuizIds.length === 1 ? "" : "s"}`
-                                        : "Filter quizzes"}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-80 min-w-80">
-                                <div className="p-1">
-                                    <Input
-                                        value={quizQuery}
-                                        onChange={(event) => setQuizQuery(event.target.value)}
-                                        onKeyDown={(event) => event.stopPropagation()}
-                                        placeholder="Search quizzes..."
-                                        aria-label="Search quizzes"
-                                        className="h-8 rounded-md"
-                                    />
-                                </div>
-                                <DropdownMenuSeparator/>
-                                <DropdownMenuLabel>
-                                    {filteredQuizOptions.length ? "Select quiz filters" : "No matching quizzes"}
-                                </DropdownMenuLabel>
-                                <div className="max-h-64 overflow-y-auto p-1">
-                                    {filteredQuizOptions.map((quiz) => (
-                                        <DropdownMenuCheckboxItem
-                                            key={quiz.id}
-                                            checked={selectedQuizIds.includes(quiz.id)}
-                                            onCheckedChange={() => toggleQuizFilter(quiz.id)}
-                                            onSelect={(event) => event.preventDefault()}
-                                        >
-                                            {quiz.title}
-                                        </DropdownMenuCheckboxItem>
-                                    ))}
-                                    {!filteredQuizOptions.length ? (
-                                        <p className="px-2 py-1 text-xs text-muted-foreground">
-                                            No quizzes match your search.
-                                        </p>
-                                    ) : null}
-                                </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <div className="w-full sm:w-44">
-                            <Select
-                                value={quizStatusFilter}
-                                onChange={(event) => setQuizStatusFilter(event.target.value as QuizStatusFilter)}
-                                aria-label="Quiz status filter"
-                                className="h-8 rounded-lg text-xs"
-                            >
-                                <option value="all">All quiz statuses</option>
-                                <option value="quizzed">Quizzed questions</option>
-                                <option value="non-quizzed">Non-quizzed questions</option>
-                            </Select>
-                        </div>
-                        {selectedConceptIds.length || selectedQuizIds.length || quizStatusFilter !== "all" ? (
+                        {selectedConceptIds.length ? (
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={clearAllFilters}
+                                onClick={clearConceptFilters}
                                 className="rounded-lg"
                             >
                                 Clear filters
@@ -389,43 +246,6 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
                                 </button>
                             </span>
                         ))}
-                    </div>
-                ) : null}
-                {selectedQuizzes.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {selectedQuizzes.map((quiz) => (
-                            <span
-                                key={quiz.id}
-                                className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] leading-none text-foreground"
-                            >
-                                {quiz.title}
-                                <button
-                                    type="button"
-                                    onClick={() => toggleQuizFilter(quiz.id)}
-                                    aria-label={`Remove ${quiz.title} quiz filter`}
-                                    className="rounded-sm opacity-60 transition hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-                                >
-                                    <XIcon className="size-3"/>
-                                </button>
-                            </span>
-                        ))}
-                    </div>
-                ) : null}
-                {quizStatusFilter !== "all" ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        <span
-                            className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[11px] leading-none text-foreground"
-                        >
-                            {quizStatusFilter === "quizzed" ? "Quizzed questions" : "Non-quizzed questions"}
-                            <button
-                                type="button"
-                                onClick={() => setQuizStatusFilter("all")}
-                                aria-label="Remove quiz status filter"
-                                className="rounded-sm opacity-60 transition hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
-                            >
-                                <XIcon className="size-3"/>
-                            </button>
-                        </span>
                     </div>
                 ) : null}
             </div>
@@ -465,7 +285,7 @@ export function DataTable<TData extends { concepts: Concept[]; quizzes: Quiz[] }
                     ) : (
                         <TableRow>
                             <TableCell colSpan={columns.length} className="h-24 text-center">
-                                {selectedConceptIds.length || selectedQuizIds.length || quizStatusFilter !== "all"
+                                {selectedConceptIds.length
                                     ? "No questions match the selected filters."
                                     : "No results."}
                             </TableCell>
@@ -514,8 +334,6 @@ export function DataTableSkeleton({
                     <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                         <Skeleton className="h-8 w-full rounded-lg sm:w-48"/>
                         <Skeleton className="h-8 w-full rounded-lg sm:w-40"/>
-                        <Skeleton className="h-8 w-full rounded-lg sm:w-40"/>
-                        <Skeleton className="h-8 w-full rounded-lg sm:w-44"/>
                         <Skeleton className="h-8 w-28 rounded-lg"/>
                     </div>
                     <Skeleton className="h-4 w-40"/>
@@ -524,7 +342,6 @@ export function DataTableSkeleton({
                     <Skeleton className="h-6 w-24 rounded-md"/>
                     <Skeleton className="h-6 w-28 rounded-md"/>
                     <Skeleton className="h-6 w-20 rounded-md"/>
-                    <Skeleton className="h-6 w-24 rounded-md"/>
                 </div>
             </div>
             <Table>
