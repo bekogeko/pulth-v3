@@ -90,7 +90,7 @@ export async function getCurriculumDetail(subjectSlug: string, curriculumSlug: s
         })
         .from(curriculumTopic)
         .where(eq(curriculumTopic.curriculumId, detail.id))
-        .orderBy(asc(curriculumTopic.id));
+        .orderBy(asc(curriculumTopic.position), asc(curriculumTopic.id));
 
     return {...detail, topics};
 }

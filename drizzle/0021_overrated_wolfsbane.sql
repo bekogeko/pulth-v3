@@ -1,0 +1,1 @@
+ALTER TABLE "curriculumTopics" ADD COLUMN "position" integer;

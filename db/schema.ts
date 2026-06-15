@@ -210,4 +210,5 @@ export const curriculumTopic = pgTable("curriculumTopics", {
     name: varchar({ length: 255 }).notNull(),
     slug: varchar({ length: 255 }).notNull(),
     description: varchar({ length: 255 }).notNull(),
+    position: integer()
 })
