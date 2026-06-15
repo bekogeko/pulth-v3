@@ -1,7 +1,7 @@
 import type {Metadata} from "next";
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {FolderTree} from "lucide-react";
+import {ArrowRight, FolderTree} from "lucide-react";
 
 import {getCurriculumDetail, getCurriculumSlugs} from "@/app/actions/subject";
 import {Button} from "@/components/ui/button";
@@ -82,16 +82,24 @@ export default async function CurriculumPage({params}: CurriculumPageProps) {
                 {curriculum.topics.length > 0 ? (
                     <ol className="divide-y divide-border rounded-lg border border-border bg-card">
                         {curriculum.topics.map((topic, index) => (
-                            <li key={topic.id} className="flex gap-4 p-5 sm:p-6">
-                                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                                    {index + 1}
-                                </span>
-                                <div className="min-w-0 space-y-1">
-                                    <h2 className="text-lg font-semibold leading-snug">{topic.name}</h2>
-                                    <p className="text-sm leading-6 text-muted-foreground">
-                                        {topic.description}
-                                    </p>
-                                </div>
+                            <li key={topic.id}>
+                                <Link
+                                    href={`/${curriculum.subjectSlug}/${curriculum.slug}/${topic.slug}`}
+                                    className="group flex gap-4 p-5 transition-colors hover:bg-muted/40 sm:p-6"
+                                >
+                                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                                        {index + 1}
+                                    </span>
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <h2 className="text-lg font-semibold leading-snug group-hover:text-primary">
+                                            {topic.name}
+                                        </h2>
+                                        <p className="text-sm leading-6 text-muted-foreground">
+                                            {topic.description}
+                                        </p>
+                                    </div>
+                                    <ArrowRight className="mt-1 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                                </Link>
                             </li>
                         ))}
                     </ol>

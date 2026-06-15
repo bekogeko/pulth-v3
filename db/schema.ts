@@ -20,10 +20,6 @@ import type {EditorJsOutput} from "@/schemas/EditorTypes";
 export const articleTable = pgTable("articles", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
 
-    // Used only while migrating/importing old MongoDB documents.
-    legacyMongoId: varchar("legacy_mongo_id", { length: 24 }).unique(),
-
-    // legacy mongoDB Id
     authorId: varchar("author_id", { length: 255 }).notNull(),
 
     title: varchar({ length: 255 }).notNull(),
@@ -50,25 +46,6 @@ export const questionTable = pgTable("questions", {
     explanation: varchar({ length: 255 }),
     ownerId: varchar({length:255}).notNull(),
 })
-
-//
-// export const quizTable = pgTable("quizzes", {
-//     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-//     title: varchar({ length: 255 }).notNull(),
-//     description: varchar({ length: 255 }).notNull(),
-//     slug: varchar({ length: 127 }).unique().notNull(),
-// });
-//
-// export const quizQuestionTable = pgTable("quiz_questions", {
-//     quizId: integer().references(()=>quizTable.id,{
-//         onDelete: "cascade"
-//     }).notNull(),
-//     questionId: integer().references(()=>questionTable.id,{
-//         onDelete: "cascade"
-//     }).notNull(),
-// },(t)=>({
-//     pk:primaryKey({columns:[t.quizId,t.questionId]}),
-// }))
 
 export const questionOptionTable = pgTable("question_options", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -206,9 +183,39 @@ export const curriculum = pgTable("curriculums", {
 
 export const curriculumTopic = pgTable("curriculumTopics", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    curriculumId: integer().references(()=>curriculum.id),
+    curriculumId: integer().references(()=>curriculum.id,{onDelete:"cascade"}).notNull(),
     name: varchar({ length: 255 }).notNull(),
     slug: varchar({ length: 255 }).notNull(),
     description: varchar({ length: 255 }).notNull(),
     position: integer()
-})
+},(t)=>({
+    topicCurriculumUnique: unique().on(t.id, t.curriculumId),
+}))
+
+export const curriculumConcept = pgTable("curriculum_concepts", {
+    // id of concept's curriculum
+    curriculumId: integer().references(()=>curriculum.id,{onDelete:"cascade"}).notNull(),
+    // concepts global Id
+    conceptId: integer().references(()=>conceptTable.id,{onDelete:"cascade"}).notNull(),
+    localName: varchar("local_name", { length: 255 }),
+    localDescription: varchar("local_description", { length: 255 }),
+},(t)=>({
+    pk: primaryKey({columns:[t.curriculumId,t.conceptId]}),
+    conceptIdx: index("curriculum_concepts_concept_id_idx").on(t.conceptId),
+}))
+
+export const curriculumTopicConcepts = pgTable("curriculumTopics_concepts", {
+    curriculumId: integer().notNull(),
+    curriculumTopicId: integer().notNull(),
+    conceptId: integer().notNull(),
+},(t)=>({
+    pk: primaryKey({columns:[t.curriculumTopicId,t.conceptId]}),
+    curriculumTopicFk: foreignKey({
+        columns: [t.curriculumTopicId, t.curriculumId],
+        foreignColumns: [curriculumTopic.id, curriculumTopic.curriculumId],
+    }).onDelete("cascade"),
+    curriculumConceptFk: foreignKey({
+        columns: [t.curriculumId, t.conceptId],
+        foreignColumns: [curriculumConcept.curriculumId, curriculumConcept.conceptId],
+    }).onDelete("cascade"),
+}))
