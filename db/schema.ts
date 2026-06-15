@@ -100,6 +100,7 @@ export const questionConceptsTable = pgTable("question_concepts", {
 export const subjectTable = pgTable("subjects", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     name: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 255 }).unique().notNull(),
 });
 
 //cascading and not nulling -- here
