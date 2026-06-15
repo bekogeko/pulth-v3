@@ -9,6 +9,10 @@ import {
     articleTable,
     articleTopicsTable,
     conceptTable,
+    curriculum,
+    curriculumConcept,
+    curriculumTopic,
+    curriculumTopicConcepts,
     questionConceptsTable,
     questionTable,
     subjectTable,
@@ -29,6 +33,7 @@ const NOT_AUTHORIZED: AdminMutationState = {
 };
 
 const CONCEPT_SLUG_MAX_LENGTH = 255;
+const CURRICULUM_LOCAL_FIELD_MAX_LENGTH = 255;
 const TOPIC_SLUG_MAX_LENGTH = 127;
 const SUBJECT_SLUG_MAX_LENGTH = 255;
 const SLUG_SUFFIX_RESERVE = 8;
@@ -87,7 +92,7 @@ export async function getAdminOverview() {
 
     const countOf = async (query: Promise<{value: number}[]>) => (await query)[0]?.value ?? 0;
 
-    const [articles, publishedArticles, questions, concepts, topics, subjects, answers] = await Promise.all([
+    const [articles, publishedArticles, questions, concepts, curriculums, topics, subjects, answers] = await Promise.all([
         countOf(database.select({value: count()}).from(articleTable)),
         countOf(
             database
@@ -97,6 +102,7 @@ export async function getAdminOverview() {
         ),
         countOf(database.select({value: count()}).from(questionTable)),
         countOf(database.select({value: count()}).from(conceptTable)),
+        countOf(database.select({value: count()}).from(curriculum)),
         countOf(database.select({value: count()}).from(topicTable)),
         countOf(database.select({value: count()}).from(subjectTable)),
         countOf(database.select({value: count()}).from(userAnswerTable)),
@@ -107,6 +113,7 @@ export async function getAdminOverview() {
         publishedArticles,
         questions,
         concepts,
+        curriculums,
         topics,
         subjects,
         answers,
@@ -392,6 +399,436 @@ export async function deleteConcept(conceptId: number): Promise<AdminMutationSta
         }
 
         return {status: "error", message: "Unable to delete the concept right now."};
+    }
+}
+
+// --- Curriculum concept bindings ---
+
+type CurriculumPathInfo = {
+    slug: string;
+    subjectSlug: string | null;
+    topicSlugs: string[];
+};
+
+function isPositiveInteger(value: number) {
+    return Number.isInteger(value) && value > 0;
+}
+
+function normalizeOptionalAdminText(value: string | null | undefined) {
+    const normalized = value?.trim() ?? "";
+
+    return normalized || null;
+}
+
+function validateLocalCurriculumText(localName: string | null, localDescription: string | null): AdminMutationState | null {
+    if (localName && localName.length > CURRICULUM_LOCAL_FIELD_MAX_LENGTH) {
+        return {status: "error", message: "Local name must be 255 characters or fewer."};
+    }
+
+    if (localDescription && localDescription.length > CURRICULUM_LOCAL_FIELD_MAX_LENGTH) {
+        return {status: "error", message: "Local description must be 255 characters or fewer."};
+    }
+
+    return null;
+}
+
+async function getCurriculumPathInfo(curriculumId: number): Promise<CurriculumPathInfo | null> {
+    const [pathInfo] = await database
+        .select({
+            slug: curriculum.slug,
+            subjectSlug: subjectTable.slug,
+        })
+        .from(curriculum)
+        .leftJoin(subjectTable, eq(curriculum.subjectId, subjectTable.id))
+        .where(eq(curriculum.id, curriculumId))
+        .limit(1);
+
+    if (!pathInfo) {
+        return null;
+    }
+
+    const topicSlugs = await database
+        .select({slug: curriculumTopic.slug})
+        .from(curriculumTopic)
+        .where(eq(curriculumTopic.curriculumId, curriculumId));
+
+    return {
+        ...pathInfo,
+        topicSlugs: topicSlugs.map((topic) => topic.slug),
+    };
+}
+
+function revalidateCurriculumBindingPaths(pathInfo: CurriculumPathInfo | null) {
+    revalidatePath("/admin");
+    revalidatePath("/admin/curriculums");
+
+    if (pathInfo?.subjectSlug) {
+        revalidatePath(`/${pathInfo.subjectSlug}/${pathInfo.slug}`);
+
+        for (const topicSlug of pathInfo.topicSlugs) {
+            revalidatePath(`/${pathInfo.subjectSlug}/${pathInfo.slug}/${topicSlug}`);
+        }
+    }
+}
+
+export async function getAdminCurriculumBindings() {
+    if (!(await isAdmin())) {
+        return {curriculums: [], concepts: []};
+    }
+
+    const [curriculumRows, topicRows, conceptRows, bindingRows, topicBindingRows] = await Promise.all([
+        database
+            .select({
+                id: curriculum.id,
+                name: curriculum.name,
+                slug: curriculum.slug,
+                subjectName: subjectTable.name,
+            })
+            .from(curriculum)
+            .leftJoin(subjectTable, eq(curriculum.subjectId, subjectTable.id))
+            .orderBy(asc(subjectTable.name), asc(curriculum.name)),
+        database
+            .select({
+                id: curriculumTopic.id,
+                curriculumId: curriculumTopic.curriculumId,
+                name: curriculumTopic.name,
+                slug: curriculumTopic.slug,
+                description: curriculumTopic.description,
+                position: curriculumTopic.position,
+            })
+            .from(curriculumTopic)
+            .orderBy(asc(curriculumTopic.curriculumId), asc(curriculumTopic.position), asc(curriculumTopic.id)),
+        database
+            .select({
+                id: conceptTable.id,
+                name: conceptTable.name,
+                slug: conceptTable.slug,
+                description: conceptTable.description,
+            })
+            .from(conceptTable)
+            .orderBy(asc(conceptTable.name)),
+        database
+            .select({
+                curriculumId: curriculumConcept.curriculumId,
+                conceptId: curriculumConcept.conceptId,
+                localName: curriculumConcept.localName,
+                localDescription: curriculumConcept.localDescription,
+                name: conceptTable.name,
+                slug: conceptTable.slug,
+                globalDescription: conceptTable.description,
+            })
+            .from(curriculumConcept)
+            .innerJoin(conceptTable, eq(curriculumConcept.conceptId, conceptTable.id))
+            .orderBy(asc(curriculumConcept.curriculumId), asc(conceptTable.name)),
+        database
+            .select({
+                curriculumId: curriculumTopicConcepts.curriculumId,
+                curriculumTopicId: curriculumTopicConcepts.curriculumTopicId,
+                conceptId: curriculumTopicConcepts.conceptId,
+            })
+            .from(curriculumTopicConcepts)
+            .orderBy(
+                asc(curriculumTopicConcepts.curriculumId),
+                asc(curriculumTopicConcepts.curriculumTopicId),
+                asc(curriculumTopicConcepts.conceptId),
+            ),
+    ]);
+
+    const topicsByCurriculum = new Map<number, {
+        id: number;
+        name: string;
+        slug: string;
+        description: string;
+        position: number | null;
+        conceptIds: number[];
+    }[]>();
+    const topicConceptIds = new Map<number, number[]>();
+    const topicIdsByCurriculumConcept = new Map<string, number[]>();
+
+    for (const topicBinding of topicBindingRows) {
+        const conceptIds = topicConceptIds.get(topicBinding.curriculumTopicId) ?? [];
+        conceptIds.push(topicBinding.conceptId);
+        topicConceptIds.set(topicBinding.curriculumTopicId, conceptIds);
+
+        const conceptTopicKey = `${topicBinding.curriculumId}:${topicBinding.conceptId}`;
+        const topicIds = topicIdsByCurriculumConcept.get(conceptTopicKey) ?? [];
+        topicIds.push(topicBinding.curriculumTopicId);
+        topicIdsByCurriculumConcept.set(conceptTopicKey, topicIds);
+    }
+
+    for (const topic of topicRows) {
+        const topics = topicsByCurriculum.get(topic.curriculumId) ?? [];
+        topics.push({
+            id: topic.id,
+            name: topic.name,
+            slug: topic.slug,
+            description: topic.description,
+            position: topic.position,
+            conceptIds: topicConceptIds.get(topic.id) ?? [],
+        });
+        topicsByCurriculum.set(topic.curriculumId, topics);
+    }
+
+    const conceptsByCurriculum = new Map<number, {
+        id: number;
+        name: string;
+        slug: string;
+        globalDescription: string | null;
+        localName: string | null;
+        localDescription: string | null;
+        topicIds: number[];
+    }[]>();
+
+    for (const binding of bindingRows) {
+        const concepts = conceptsByCurriculum.get(binding.curriculumId) ?? [];
+        concepts.push({
+            id: binding.conceptId,
+            name: binding.name,
+            slug: binding.slug,
+            globalDescription: binding.globalDescription,
+            localName: binding.localName,
+            localDescription: binding.localDescription,
+            topicIds: topicIdsByCurriculumConcept.get(`${binding.curriculumId}:${binding.conceptId}`) ?? [],
+        });
+        conceptsByCurriculum.set(binding.curriculumId, concepts);
+    }
+
+    return {
+        concepts: conceptRows,
+        curriculums: curriculumRows.map((curriculumItem) => ({
+            ...curriculumItem,
+            topics: topicsByCurriculum.get(curriculumItem.id) ?? [],
+            boundConcepts: conceptsByCurriculum.get(curriculumItem.id) ?? [],
+        })),
+    };
+}
+
+export async function adminBindCurriculumConcept(input: {
+    curriculumId: number;
+    conceptId: number;
+    localName?: string | null;
+    localDescription?: string | null;
+}): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (!isPositiveInteger(input.curriculumId) || !isPositiveInteger(input.conceptId)) {
+        return {status: "error", message: "Choose a curriculum and concept."};
+    }
+
+    const localName = normalizeOptionalAdminText(input.localName);
+    const localDescription = normalizeOptionalAdminText(input.localDescription);
+    const validationError = validateLocalCurriculumText(localName, localDescription);
+
+    if (validationError) {
+        return validationError;
+    }
+
+    const [pathInfo, concept, existingBinding] = await Promise.all([
+        getCurriculumPathInfo(input.curriculumId),
+        database
+            .select({id: conceptTable.id})
+            .from(conceptTable)
+            .where(eq(conceptTable.id, input.conceptId))
+            .limit(1),
+        database
+            .select({
+                curriculumId: curriculumConcept.curriculumId,
+                conceptId: curriculumConcept.conceptId,
+            })
+            .from(curriculumConcept)
+            .where(and(
+                eq(curriculumConcept.curriculumId, input.curriculumId),
+                eq(curriculumConcept.conceptId, input.conceptId),
+            ))
+            .limit(1),
+    ]);
+
+    if (!pathInfo) {
+        return {status: "error", message: "Curriculum not found."};
+    }
+
+    if (!concept[0]) {
+        return {status: "error", message: "Concept not found."};
+    }
+
+    try {
+        if (existingBinding[0]) {
+            await database
+                .update(curriculumConcept)
+                .set({localName, localDescription})
+                .where(and(
+                    eq(curriculumConcept.curriculumId, input.curriculumId),
+                    eq(curriculumConcept.conceptId, input.conceptId),
+                ));
+
+            revalidateCurriculumBindingPaths(pathInfo);
+
+            return {status: "success", message: "Concept binding updated."};
+        }
+
+        await database.insert(curriculumConcept).values({
+            curriculumId: input.curriculumId,
+            conceptId: input.conceptId,
+            localName,
+            localDescription,
+        });
+
+        revalidateCurriculumBindingPaths(pathInfo);
+
+        return {status: "success", message: "Concept bound to curriculum."};
+    } catch {
+        return {status: "error", message: "Unable to save the concept binding right now."};
+    }
+}
+
+export async function adminUnbindCurriculumConcept(input: {
+    curriculumId: number;
+    conceptId: number;
+}): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (!isPositiveInteger(input.curriculumId) || !isPositiveInteger(input.conceptId)) {
+        return {status: "error", message: "Choose a curriculum and concept."};
+    }
+
+    const [pathInfo, existingBinding] = await Promise.all([
+        getCurriculumPathInfo(input.curriculumId),
+        database
+            .select({
+                curriculumId: curriculumConcept.curriculumId,
+                conceptId: curriculumConcept.conceptId,
+            })
+            .from(curriculumConcept)
+            .where(and(
+                eq(curriculumConcept.curriculumId, input.curriculumId),
+                eq(curriculumConcept.conceptId, input.conceptId),
+            ))
+            .limit(1),
+    ]);
+
+    if (!pathInfo) {
+        return {status: "error", message: "Curriculum not found."};
+    }
+
+    if (!existingBinding[0]) {
+        return {status: "error", message: "Concept binding not found."};
+    }
+
+    try {
+        await database
+            .delete(curriculumConcept)
+            .where(and(
+                eq(curriculumConcept.curriculumId, input.curriculumId),
+                eq(curriculumConcept.conceptId, input.conceptId),
+            ));
+
+        revalidateCurriculumBindingPaths(pathInfo);
+
+        return {status: "success", message: "Concept unbound from curriculum."};
+    } catch {
+        return {status: "error", message: "Unable to remove the concept binding right now."};
+    }
+}
+
+export async function adminSetCurriculumTopicConcept(input: {
+    curriculumId: number;
+    curriculumTopicId: number;
+    conceptId: number;
+    assigned: boolean;
+}): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (
+        !isPositiveInteger(input.curriculumId) ||
+        !isPositiveInteger(input.curriculumTopicId) ||
+        !isPositiveInteger(input.conceptId)
+    ) {
+        return {status: "error", message: "Choose a curriculum topic and concept."};
+    }
+
+    const [pathInfo, topic] = await Promise.all([
+        getCurriculumPathInfo(input.curriculumId),
+        database
+            .select({id: curriculumTopic.id})
+            .from(curriculumTopic)
+            .where(and(
+                eq(curriculumTopic.id, input.curriculumTopicId),
+                eq(curriculumTopic.curriculumId, input.curriculumId),
+            ))
+            .limit(1),
+    ]);
+
+    if (!pathInfo) {
+        return {status: "error", message: "Curriculum not found."};
+    }
+
+    if (!topic[0]) {
+        return {status: "error", message: "Curriculum topic not found."};
+    }
+
+    try {
+        if (!input.assigned) {
+            await database
+                .delete(curriculumTopicConcepts)
+                .where(and(
+                    eq(curriculumTopicConcepts.curriculumId, input.curriculumId),
+                    eq(curriculumTopicConcepts.curriculumTopicId, input.curriculumTopicId),
+                    eq(curriculumTopicConcepts.conceptId, input.conceptId),
+                ));
+
+            revalidateCurriculumBindingPaths(pathInfo);
+
+            return {status: "success", message: "Concept removed from topic."};
+        }
+
+        const [binding] = await database
+            .select({
+                curriculumId: curriculumConcept.curriculumId,
+                conceptId: curriculumConcept.conceptId,
+            })
+            .from(curriculumConcept)
+            .where(and(
+                eq(curriculumConcept.curriculumId, input.curriculumId),
+                eq(curriculumConcept.conceptId, input.conceptId),
+            ))
+            .limit(1);
+
+        if (!binding) {
+            return {status: "error", message: "Bind the concept to this curriculum before assigning it to a topic."};
+        }
+
+        const [existingTopicBinding] = await database
+            .select({
+                curriculumTopicId: curriculumTopicConcepts.curriculumTopicId,
+                conceptId: curriculumTopicConcepts.conceptId,
+            })
+            .from(curriculumTopicConcepts)
+            .where(and(
+                eq(curriculumTopicConcepts.curriculumId, input.curriculumId),
+                eq(curriculumTopicConcepts.curriculumTopicId, input.curriculumTopicId),
+                eq(curriculumTopicConcepts.conceptId, input.conceptId),
+            ))
+            .limit(1);
+
+        if (!existingTopicBinding) {
+            await database.insert(curriculumTopicConcepts).values({
+                curriculumId: input.curriculumId,
+                curriculumTopicId: input.curriculumTopicId,
+                conceptId: input.conceptId,
+            });
+        }
+
+        revalidateCurriculumBindingPaths(pathInfo);
+
+        return {status: "success", message: "Concept assigned to topic."};
+    } catch {
+        return {status: "error", message: "Unable to update the topic concept binding right now."};
     }
 }
 

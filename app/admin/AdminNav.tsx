@@ -22,6 +22,11 @@ const adminNavLinks = [
         isActive: (pathname: string) => pathname.startsWith("/admin/concepts"),
     },
     {
+        title: "Curriculums",
+        href: "/admin/curriculums",
+        isActive: (pathname: string) => pathname.startsWith("/admin/curriculums"),
+    },
+    {
         title: "Topics",
         href: "/admin/topics",
         isActive: (pathname: string) => pathname.startsWith("/admin/topics"),

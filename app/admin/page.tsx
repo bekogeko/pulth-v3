@@ -25,6 +25,11 @@ export default async function AdminOverviewPage() {
             hint: null,
         },
         {
+            label: "Curriculums",
+            value: stats.curriculums,
+            hint: null,
+        },
+        {
             label: "Topics",
             value: stats.topics,
             hint: null,
