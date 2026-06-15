@@ -13,7 +13,7 @@ import {
 } from "@/app/(dashboard)/quiz/quiz";
 import type {QuestionConceptRating} from "@/app/(dashboard)/quiz/quiz";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
-import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/concepts/[conceptId]/solve/QuizSolveSkeleton";
+import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/QuizSolveSkeleton";
 import {Button} from "@/components/ui/button";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
 import {Label} from "@/components/ui/label";

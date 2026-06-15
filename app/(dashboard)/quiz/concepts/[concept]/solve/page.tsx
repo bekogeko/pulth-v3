@@ -2,7 +2,7 @@ import type {Metadata} from "next";
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
 import {notFound, permanentRedirect} from "next/navigation";
 
-import {QuizSolver} from "@/app/(dashboard)/quiz/concepts/[conceptId]/solve/QuizSolver";
+import {QuizSolver} from "@/app/(dashboard)/quiz/QuizSolver";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {getAllConcepts, getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 import {getAbsoluteUrl} from "@/lib/site-url";
@@ -12,11 +12,11 @@ export const dynamicParams = true;
 
 export async function generateStaticParams() {
     const concepts = await getAllConcepts();
-    return concepts.map(({slug}) => ({conceptId: slug}));
+    return concepts.map(({slug}) => ({concept: slug}));
 }
 
 type SolveConceptPageProps = {
-    params: Promise<{ conceptId: string }>;
+    params: Promise<{ concept: string }>;
 };
 
 type ConceptQuestion = Awaited<ReturnType<typeof getQuestionsByConceptId>>[number];
@@ -91,14 +91,14 @@ function QuestionOverview({questions}: {questions: ConceptQuestion[]}) {
 }
 
 export async function generateMetadata({params}: SolveConceptPageProps): Promise<Metadata> {
-    const {conceptId} = await params;
-    const concept = await getConceptByIdentifier(conceptId).then((result) => result[0]);
+    const {concept: conceptParam} = await params;
+    const concept = await getConceptByIdentifier(conceptParam).then((result) => result[0]);
 
     if (!concept) {
         notFound();
     }
 
-    if (conceptId !== concept.slug) {
+    if (conceptParam !== concept.slug) {
         permanentRedirect(`/quiz/concepts/${concept.slug}/solve`);
     }
 
@@ -133,14 +133,14 @@ export async function generateMetadata({params}: SolveConceptPageProps): Promise
 }
 
 export default async function SolveConceptPage({params}: SolveConceptPageProps) {
-    const {conceptId: conceptIdParam} = await params;
-    const concept = await getConceptByIdentifier(conceptIdParam).then((results) => results[0]);
+    const {concept: conceptParam} = await params;
+    const concept = await getConceptByIdentifier(conceptParam).then((results) => results[0]);
 
     if (!concept) {
         notFound();
     }
 
-    if (conceptIdParam !== concept.slug) {
+    if (conceptParam !== concept.slug) {
         permanentRedirect(`/quiz/concepts/${concept.slug}/solve`);
     }
 

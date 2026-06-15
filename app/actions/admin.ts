@@ -11,7 +11,6 @@ import {
     conceptTable,
     questionConceptsTable,
     questionTable,
-    quizTable,
     subjectTable,
     topicTable,
     userAnswerTable,
@@ -87,7 +86,7 @@ export async function getAdminOverview() {
 
     const countOf = async (query: Promise<{value: number}[]>) => (await query)[0]?.value ?? 0;
 
-    const [articles, publishedArticles, questions, quizzes, concepts, topics, subjects, answers] = await Promise.all([
+    const [articles, publishedArticles, questions, concepts, topics, subjects, answers] = await Promise.all([
         countOf(database.select({value: count()}).from(articleTable)),
         countOf(
             database
@@ -96,7 +95,6 @@ export async function getAdminOverview() {
                 .where(eq(articleTable.isPublished, true))
         ),
         countOf(database.select({value: count()}).from(questionTable)),
-        countOf(database.select({value: count()}).from(quizTable)),
         countOf(database.select({value: count()}).from(conceptTable)),
         countOf(database.select({value: count()}).from(topicTable)),
         countOf(database.select({value: count()}).from(subjectTable)),
@@ -107,7 +105,6 @@ export async function getAdminOverview() {
         articles,
         publishedArticles,
         questions,
-        quizzes,
         concepts,
         topics,
         subjects,

@@ -10,8 +10,6 @@ import {
     questionConceptsTable,
     questionOptionTable,
     questionTable,
-    quizQuestionTable,
-    quizTable,
     ratingEventTable,
     topicConceptsTable,
     topicTable,
@@ -44,11 +42,6 @@ type UpdateQuestionOptionsInput = {
     correctIndex: number;
 };
 
-type UpdateQuestionQuizzesInput = {
-    questionId: number;
-    quizIds: number[];
-};
-
 type DeleteQuestionInput = {
     questionId: number;
 };
@@ -69,12 +62,6 @@ type QuestionOptionJson = {
     isCorrect: boolean;
 };
 
-type QuizJson = {
-    id: number;
-    title: string;
-    description: string;
-};
-
 type ConceptJson = {
     id: number;
     name: string;
@@ -86,7 +73,6 @@ export type SimilarQuestionResult = {
     question: string;
     body: string | null;
     options: (QuestionOptionJson & {score?: number})[];
-    quizzes: Pick<QuizJson, "id" | "title">[];
     score: number;
 };
 
@@ -215,19 +201,6 @@ async function getOwnedQuestionId(questionId: number, userId: string): Promise<n
     return question?.id ?? null;
 }
 
-async function allQuizzesExist(quizIds: number[]): Promise<boolean> {
-    if (quizIds.length === 0) {
-        return true;
-    }
-
-    const existingQuizzes = await database
-        .select({id: quizTable.id})
-        .from(quizTable)
-        .where(inArray(quizTable.id, quizIds));
-
-    return existingQuizzes.length === quizIds.length;
-}
-
 async function allConceptsExist(conceptIds: number[]): Promise<boolean> {
     if (conceptIds.length === 0) {
         return true;
@@ -270,21 +243,6 @@ function calculateRatingChange(userRating: number, questionRating: number, wasCo
     };
 }
 
-export async function getAllQuizzes() {
-    return database
-        .select({
-            id: quizTable.id,
-            slug: quizTable.slug,
-            title: quizTable.title,
-            description: quizTable.description,
-            questionCount: count(quizQuestionTable.quizId),
-        })
-        .from(quizTable)
-        .leftJoin(quizQuestionTable, eq(quizTable.id, quizQuestionTable.quizId))
-        .groupBy(quizTable.id)
-        .orderBy(asc(quizTable.title));
-}
-
 export async function getAllConcepts() {
     return database
         .select({
@@ -322,9 +280,8 @@ export async function getSimilarQuestions(input: {
     const wordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.word_similarity`);
     const strictWordSimilarityFunction = sql.raw(`${trigramSchemaIdentifier}.strict_word_similarity`);
 
-    type SimilarQuestionRow = Omit<SimilarQuestionResult, "options" | "quizzes"> & {
+    type SimilarQuestionRow = Omit<SimilarQuestionResult, "options"> & {
         options: SimilarQuestionResult["options"] | null;
-        quizzes: SimilarQuestionResult["quizzes"] | null;
     };
 
     const result = await database.execute<SimilarQuestionRow>(sql`
@@ -395,21 +352,6 @@ export async function getSimilarQuestions(input: {
                 ),
                 '[]'::json
             ) as options,
-            coalesce(
-                (
-                    select json_agg(
-                        json_build_object(
-                            'id', qz.id,
-                            'title', qz.title
-                        )
-                        order by qz.id
-                    )
-                    from quiz_questions qq
-                    inner join quizzes qz on qz.id = qq."quizId"
-                    where qq."questionId" = rq.id
-                ),
-                '[]'::json
-            ) as quizzes,
             least(100, round(rq.similarity_score * 100)::int) as score
         from ranked_questions rq
         where rq.similarity_score >= ${SIMILAR_QUESTION_THRESHOLD}
@@ -422,7 +364,6 @@ export async function getSimilarQuestions(input: {
         question: row.question,
         body: row.body,
         options: jsonArray(row.options),
-        quizzes: jsonArray(row.quizzes),
         score: Number(row.score),
     }));
 }
@@ -509,27 +450,6 @@ export async function getMyQuestions() {
         .where(eq(questionConceptsTable.questionId, questionTable.id))
         .as("concepts_sq");
 
-    const quizzesSq = database
-        .select({
-            quizzes: sql<QuizJson[]>`
-                coalesce(
-                    json_agg(
-                        json_build_object(
-                            'id', ${quizTable.id},
-                            'title', ${quizTable.title},
-                            'description', ${quizTable.description}
-                        )
-                        order by ${quizTable.id}
-                    ),
-                    '[]'::json
-                )
-            `.as("quizzes"),
-        })
-        .from(quizQuestionTable)
-        .innerJoin(quizTable, eq(quizQuestionTable.quizId, quizTable.id))
-        .where(eq(quizQuestionTable.questionId, questionTable.id))
-        .as("quizzes_sq");
-
     const optionsSq = database
         .select({
             options: sql<QuestionOptionJson[]>`
@@ -557,13 +477,11 @@ export async function getMyQuestions() {
             ownerId: questionTable.ownerId,
             body: questionTable.body,
             concepts: sql<ConceptJson[]>`coalesce(${conceptsSq.concepts}, '[]'::json)`,
-            quizzes: sql<QuizJson[]>`coalesce(${quizzesSq.quizzes}, '[]'::json)`,
             options: sql<QuestionOptionJson[]>`coalesce(${optionsSq.options}, '[]'::json)`,
         })
         .from(questionTable)
         .where(eq(questionTable.ownerId, userId))
         .leftJoinLateral(conceptsSq, sql`true`)
-        .leftJoinLateral(quizzesSq, sql`true`)
         .leftJoinLateral(optionsSq, sql`true`);
 }
 
@@ -575,11 +493,6 @@ export async function createQuestion(
     const body = String(formData.get("body") ?? "").trim();
     const correctIndex = parseCorrectOptionIndex(formData.get("correctOption"));
     const options = normalizeOptions(formData.getAll("options[]").map(String));
-    const quizId = parseInteger(formData.get("quizId"));
-    const quizIds = uniqueIntegerIds([
-        ...parseIntegerList(formData, "quizIds[]"),
-        ...(quizId === null ? [] : [quizId]),
-    ]);
     const conceptIds = parseIntegerList(formData, "conceptIds[]");
 
     const userId = await getAuthenticatedUserId();
@@ -606,10 +519,6 @@ export async function createQuestion(
         return optionError;
     }
 
-    if (!await allQuizzesExist(quizIds)) {
-        return error("One or more quizzes could not be found.");
-    }
-
     if (!await allConceptsExist(conceptIds)) {
         return error("One or more concepts could not be found.");
     }
@@ -627,15 +536,6 @@ export async function createQuestion(
 
             if (!question) {
                 throw new Error("Question insert did not return an id.");
-            }
-
-            if (quizIds.length > 0) {
-                await tx.insert(quizQuestionTable).values(
-                    quizIds.map((quizIdValue) => ({
-                        quizId: quizIdValue,
-                        questionId: question.id,
-                    }))
-                );
             }
 
             await tx.insert(questionOptionTable).values(
@@ -759,52 +659,6 @@ export async function updateQuestionOptions({
     }
 }
 
-export async function updateQuestionQuizzes({
-    questionId,
-    quizIds,
-}: UpdateQuestionQuizzesInput): Promise<ActionState> {
-    const userId = await getAuthenticatedUserId();
-
-    if (!userId) {
-        return error("You must be signed in to update quizzes.");
-    }
-
-    const ownedQuestionId = await getOwnedQuestionId(questionId, userId);
-
-    if (!ownedQuestionId) {
-        return error("Question not found or you do not have access to it.");
-    }
-
-    const uniqueQuizIds = uniqueIntegerIds(quizIds);
-
-    if (!await allQuizzesExist(uniqueQuizIds)) {
-        return error("One or more quizzes could not be found.");
-    }
-
-    try {
-        await database.transaction(async (tx) => {
-            await tx
-                .delete(quizQuestionTable)
-                .where(eq(quizQuestionTable.questionId, ownedQuestionId));
-
-            if (uniqueQuizIds.length > 0) {
-                await tx.insert(quizQuestionTable).values(
-                    uniqueQuizIds.map((quizId) => ({
-                        questionId: ownedQuestionId,
-                        quizId,
-                    }))
-                );
-            }
-        });
-
-        revalidatePath(QUIZ_PATH);
-        revalidatePath(SELF_QUIZ_PATH);
-        return success("Quizzes updated.");
-    } catch {
-        return error("Unable to update quizzes right now.");
-    }
-}
-
 export async function deleteQuestion({
     questionId,
 }: DeleteQuestionInput): Promise<ActionState> {
@@ -835,10 +689,6 @@ export async function deleteQuestion({
             await tx
                 .delete(questionConceptRatingTable)
                 .where(eq(questionConceptRatingTable.questionId, ownedQuestionId));
-
-            await tx
-                .delete(quizQuestionTable)
-                .where(eq(quizQuestionTable.questionId, ownedQuestionId));
 
             await tx
                 .delete(questionConceptsTable)
@@ -1156,18 +1006,53 @@ export async function getQuestionsByConceptId(conceptId: number) {
         );
 }
 
-export async function getQuizzesByQuestionId(questionId: number) {
-    if (!Number.isInteger(questionId)) {
-        return [];
+export async function getQuestionsByTopicSlug(slug: string) {
+    const topic = await database
+        .select({id: topicTable.id})
+        .from(topicTable)
+        .where(eq(topicTable.slug, slug))
+        .limit(1)
+        .then((results) => results[0]);
+
+    if (!topic) {
+        throw new Error("Topic not found");
     }
+
+    // A question can belong to several concepts of the same topic, so collapse
+    // the concept links before joining options.
+    const topicQuestionIdsSq = database
+        .selectDistinct({questionId: questionConceptsTable.questionId})
+        .from(questionConceptsTable)
+        .innerJoin(topicConceptsTable, eq(topicConceptsTable.conceptId, questionConceptsTable.conceptId))
+        .where(eq(topicConceptsTable.topicId, topic.id))
+        .as("topic_question_ids_sq");
 
     return database
         .select({
-            id: quizTable.id,
-            title: quizTable.title,
-            description: quizTable.description,
+            questionId: questionTable.id,
+            question: questionTable.question,
+            body: questionTable.body,
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ) filter (where ${questionOptionTable.id} is not null),
+                    '[]'::json
+                )
+            `,
         })
-        .from(quizQuestionTable)
-        .innerJoin(quizTable, eq(quizQuestionTable.quizId, quizTable.id))
-        .where(eq(quizQuestionTable.questionId, questionId));
+        .from(questionTable)
+        .innerJoin(topicQuestionIdsSq, eq(questionTable.id, topicQuestionIdsSq.questionId))
+        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
+        .groupBy(
+            questionTable.id,
+            questionTable.question,
+            questionTable.body
+        )
+        .orderBy(asc(questionTable.id));
 }

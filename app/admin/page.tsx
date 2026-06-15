@@ -20,11 +20,6 @@ export default async function AdminOverviewPage() {
             hint: `${stats.answers} answers submitted`,
         },
         {
-            label: "Quizzes",
-            value: stats.quizzes,
-            hint: null,
-        },
-        {
             label: "Concepts",
             value: stats.concepts,
             hint: null,
