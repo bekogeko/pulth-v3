@@ -17,6 +17,7 @@ import {
     questionConceptsTable,
     questionOptionTable,
     questionTable,
+    ratingEventTable,
     subjectTable,
     topicTable,
     userAnswerTable,
@@ -1198,18 +1199,24 @@ export async function adminDiscardQuestion(questionId: number): Promise<AdminMut
         return {status: "error", message: "Only un-migrated questions can be discarded here."};
     }
 
-    const [answer] = await database
-        .select({id: userAnswerTable.id})
-        .from(userAnswerTable)
-        .where(eq(userAnswerTable.questionId, questionId))
-        .limit(1);
-
-    if (answer) {
-        return {status: "error", message: "This question has submitted answers and cannot be discarded."};
-    }
-
     try {
         await database.transaction(async (tx) => {
+            // Rating events reference the answers, and answers carry a restrict FK to
+            // question options, so they have to be cleared before the question itself.
+            await tx
+                .delete(ratingEventTable)
+                .where(inArray(
+                    ratingEventTable.answerId,
+                    tx
+                        .select({id: userAnswerTable.id})
+                        .from(userAnswerTable)
+                        .where(eq(userAnswerTable.questionId, questionId)),
+                ));
+
+            await tx
+                .delete(userAnswerTable)
+                .where(eq(userAnswerTable.questionId, questionId));
+
             await tx
                 .delete(questionConceptRatingTable)
                 .where(eq(questionConceptRatingTable.questionId, questionId));

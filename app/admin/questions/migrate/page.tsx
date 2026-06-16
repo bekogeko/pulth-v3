@@ -84,7 +84,7 @@ export default function AdminMigrateQuestionsPage() {
                         }
                     }}
                     title="Discard question"
-                    description={`"${discardTarget.question}" will be permanently deleted. Questions with submitted answers cannot be discarded.`}
+                    description={`"${discardTarget.question}" will be permanently deleted, along with any submitted answers and their rating history. This cannot be undone.`}
                     confirmLabel="Discard question"
                     isPending={discardMutation.isPending}
                     onConfirm={() => discardMutation.mutate(discardTarget.id)}
