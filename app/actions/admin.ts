@@ -1,7 +1,7 @@
 "use server";
 
 import {clerkClient} from "@clerk/nextjs/server";
-import {and, asc, count, countDistinct, desc, eq, ne} from "drizzle-orm";
+import {and, asc, count, countDistinct, desc, eq, inArray, isNull, ne} from "drizzle-orm";
 import {revalidatePath} from "next/cache";
 
 import {
@@ -13,7 +13,9 @@ import {
     curriculumConcept,
     curriculumTopic,
     curriculumTopicConcepts,
+    questionConceptRatingTable,
     questionConceptsTable,
+    questionOptionTable,
     questionTable,
     subjectTable,
     topicTable,
@@ -829,6 +831,268 @@ export async function adminSetCurriculumTopicConcept(input: {
         return {status: "success", message: "Concept assigned to topic."};
     } catch {
         return {status: "error", message: "Unable to update the topic concept binding right now."};
+    }
+}
+
+// --- Question migration ---
+
+const QUESTION_PROMPT_MAX_LENGTH = 255;
+const QUESTION_BODY_MAX_LENGTH = 1024;
+const QUESTION_EXPLANATION_MAX_LENGTH = 255;
+
+type AdminMigrateQuestionInput = {
+    questionId: number;
+    curriculumId: number;
+    conceptIds: number[];
+    prompt: string;
+    body: string;
+    explanation: string;
+};
+
+// Legacy questions carry no curriculum yet (curriculumId IS NULL). They are
+// curated one-by-one in the Migrate tab; setting a curriculum is what makes a
+// question live and scoped.
+export async function getAdminPendingQuestions() {
+    if (!(await isAdmin())) {
+        return [];
+    }
+
+    const questions = await database
+        .select({
+            id: questionTable.id,
+            question: questionTable.question,
+            body: questionTable.body,
+            explanation: questionTable.explanation,
+            createdAt: questionTable.createdAt,
+        })
+        .from(questionTable)
+        .where(isNull(questionTable.curriculumId))
+        .orderBy(asc(questionTable.id));
+
+    if (questions.length === 0) {
+        return [];
+    }
+
+    const questionIds = questions.map((question) => question.id);
+
+    const [optionRows, conceptRows] = await Promise.all([
+        database
+            .select({
+                questionId: questionOptionTable.questionId,
+                id: questionOptionTable.id,
+                option: questionOptionTable.option,
+                isCorrect: questionOptionTable.isCorrect,
+            })
+            .from(questionOptionTable)
+            .where(inArray(questionOptionTable.questionId, questionIds))
+            .orderBy(asc(questionOptionTable.id)),
+        database
+            .select({
+                questionId: questionConceptsTable.questionId,
+                id: conceptTable.id,
+                name: conceptTable.name,
+            })
+            .from(questionConceptsTable)
+            .innerJoin(conceptTable, eq(questionConceptsTable.conceptId, conceptTable.id))
+            .where(inArray(questionConceptsTable.questionId, questionIds))
+            .orderBy(asc(conceptTable.name)),
+    ]);
+
+    const optionsByQuestion = new Map<number, {id: number; option: string; isCorrect: boolean}[]>();
+    for (const option of optionRows) {
+        const options = optionsByQuestion.get(option.questionId) ?? [];
+        options.push({id: option.id, option: option.option, isCorrect: option.isCorrect});
+        optionsByQuestion.set(option.questionId, options);
+    }
+
+    const conceptsByQuestion = new Map<number, {id: number; name: string}[]>();
+    for (const concept of conceptRows) {
+        const concepts = conceptsByQuestion.get(concept.questionId) ?? [];
+        concepts.push({id: concept.id, name: concept.name});
+        conceptsByQuestion.set(concept.questionId, concepts);
+    }
+
+    return questions.map((question) => ({
+        ...question,
+        options: optionsByQuestion.get(question.id) ?? [],
+        concepts: conceptsByQuestion.get(question.id) ?? [],
+    }));
+}
+
+export async function adminMigrateQuestion(input: AdminMigrateQuestionInput): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (!isPositiveInteger(input.questionId)) {
+        return {status: "error", message: "Question not found."};
+    }
+
+    if (!isPositiveInteger(input.curriculumId)) {
+        return {status: "error", message: "Choose a curriculum."};
+    }
+
+    const prompt = input.prompt.trim();
+    const body = input.body.trim();
+    const explanation = input.explanation.trim();
+
+    if (!prompt) {
+        return {status: "error", message: "Enter a question prompt."};
+    }
+
+    if (prompt.length > QUESTION_PROMPT_MAX_LENGTH) {
+        return {status: "error", message: "Prompt must be 255 characters or fewer."};
+    }
+
+    if (body.length > QUESTION_BODY_MAX_LENGTH) {
+        return {status: "error", message: "Body must be 1024 characters or fewer."};
+    }
+
+    if (explanation.length > QUESTION_EXPLANATION_MAX_LENGTH) {
+        return {status: "error", message: "Explanation must be 255 characters or fewer."};
+    }
+
+    const conceptIds = [...new Set(input.conceptIds)].filter((id) => isPositiveInteger(id));
+
+    if (conceptIds.length === 0) {
+        return {status: "error", message: "Select at least one concept."};
+    }
+
+    const [question] = await database
+        .select({id: questionTable.id, curriculumId: questionTable.curriculumId})
+        .from(questionTable)
+        .where(eq(questionTable.id, input.questionId))
+        .limit(1);
+
+    if (!question) {
+        return {status: "error", message: "Question not found."};
+    }
+
+    if (question.curriculumId !== null) {
+        return {status: "error", message: "This question has already been migrated."};
+    }
+
+    const pathInfo = await getCurriculumPathInfo(input.curriculumId);
+
+    if (!pathInfo) {
+        return {status: "error", message: "Curriculum not found."};
+    }
+
+    // Every chosen concept must be bound to the target curriculum, mirroring the
+    // guard in adminSetCurriculumTopicConcept.
+    const boundConcepts = await database
+        .select({conceptId: curriculumConcept.conceptId})
+        .from(curriculumConcept)
+        .where(and(
+            eq(curriculumConcept.curriculumId, input.curriculumId),
+            inArray(curriculumConcept.conceptId, conceptIds),
+        ));
+
+    if (boundConcepts.length !== conceptIds.length) {
+        return {status: "error", message: "Every concept must be bound to the chosen curriculum."};
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .update(questionTable)
+                .set({
+                    curriculumId: input.curriculumId,
+                    question: prompt,
+                    body: body || null,
+                    explanation: explanation || null,
+                    updatedAt: new Date(),
+                })
+                .where(eq(questionTable.id, question.id));
+
+            await tx
+                .delete(questionConceptsTable)
+                .where(eq(questionConceptsTable.questionId, question.id));
+
+            await tx.insert(questionConceptsTable).values(
+                conceptIds.map((conceptId) => ({
+                    questionId: question.id,
+                    conceptId,
+                })),
+            );
+        });
+
+        const conceptSlugs = await database
+            .select({slug: conceptTable.slug})
+            .from(conceptTable)
+            .where(inArray(conceptTable.id, conceptIds));
+
+        revalidateCurriculumBindingPaths(pathInfo);
+        revalidatePath("/quiz");
+
+        for (const {slug} of conceptSlugs) {
+            revalidatePath(`/quiz/concepts/${slug}`);
+            revalidatePath(`/quiz/concepts/${slug}/solve`);
+        }
+
+        return {status: "success", message: "Question migrated."};
+    } catch {
+        return {status: "error", message: "Unable to migrate the question right now."};
+    }
+}
+
+export async function adminDiscardQuestion(questionId: number): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (!isPositiveInteger(questionId)) {
+        return {status: "error", message: "Question not found."};
+    }
+
+    const [question] = await database
+        .select({id: questionTable.id, curriculumId: questionTable.curriculumId})
+        .from(questionTable)
+        .where(eq(questionTable.id, questionId))
+        .limit(1);
+
+    if (!question) {
+        return {status: "error", message: "Question not found."};
+    }
+
+    if (question.curriculumId !== null) {
+        return {status: "error", message: "Only un-migrated questions can be discarded here."};
+    }
+
+    const [answer] = await database
+        .select({id: userAnswerTable.id})
+        .from(userAnswerTable)
+        .where(eq(userAnswerTable.questionId, questionId))
+        .limit(1);
+
+    if (answer) {
+        return {status: "error", message: "This question has submitted answers and cannot be discarded."};
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            await tx
+                .delete(questionConceptRatingTable)
+                .where(eq(questionConceptRatingTable.questionId, questionId));
+
+            await tx
+                .delete(questionConceptsTable)
+                .where(eq(questionConceptsTable.questionId, questionId));
+
+            await tx
+                .delete(questionOptionTable)
+                .where(eq(questionOptionTable.questionId, questionId));
+
+            await tx
+                .delete(questionTable)
+                .where(eq(questionTable.id, questionId));
+        });
+
+        revalidatePath("/admin");
+
+        return {status: "success", message: "Question discarded."};
+    } catch {
+        return {status: "error", message: "Unable to discard the question right now."};
     }
 }
 

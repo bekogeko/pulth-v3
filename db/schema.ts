@@ -44,7 +44,17 @@ export const questionTable = pgTable("questions", {
     question: varchar({ length: 255 }).notNull(),
     body: varchar({ length: 1024 }),
     explanation: varchar({ length: 255 }),
-    ownerId: varchar({length:255}).notNull(),
+
+    // Owning curriculum. NULL = legacy question pending one-by-one migration
+    // (hidden from the question bank); set = live and scoped to this curriculum.
+    curriculumId: integer().references(() => curriculum.id, { onDelete: "cascade" }),
+
+    // Abandoned ownership. Kept nullable so admin-authored questions don't need
+    // it and legacy values stay readable during migration; dropped afterwards.
+    ownerId: varchar({ length: 255 }),
+
+    createdAt: timestamp().defaultNow().notNull(),
+    updatedAt: timestamp().defaultNow().notNull(),
 })
 
 export const questionOptionTable = pgTable("question_options", {

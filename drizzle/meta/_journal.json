@@ -176,6 +176,13 @@
       "when": 1781544559797,
       "tag": "0024_perfect_mister_fear",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781554020687,
+      "tag": "0025_stiff_loki",
+      "breakpoints": true
     }
   ]
 }
