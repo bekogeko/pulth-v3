@@ -2,11 +2,13 @@
 
 import {useEffect, useMemo, useState} from "react";
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {useSearchParams} from "next/navigation";
 import {ArrowLeft, ArrowRight, Check, RotateCcw} from "lucide-react";
 import {toast} from "sonner";
 
 import {
     getConceptById,
+    getCurriculumQuestionsByConceptId,
     getQuestionConceptRatings,
     getQuestionsByConceptId,
     submitUserAnswer
@@ -41,6 +43,13 @@ function slugifyQuestion(value: string) {
 
 export function QuizSolver({conceptId}: QuizSolverProps) {
     const queryClient = useQueryClient();
+    const searchParams = useSearchParams();
+    const curriculumParam = searchParams.get("curriculum");
+    // Read curriculum scope on the client so the solve page itself stays static
+    // (reading searchParams in the server component would force dynamic rendering).
+    const curriculumId = curriculumParam && /^\d+$/.test(curriculumParam)
+        ? Number.parseInt(curriculumParam, 10)
+        : null;
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
     const [checkedQuestions, setCheckedQuestions] = useState<Record<number, boolean>>({});
     const [ratingSnapshots, setRatingSnapshots] = useState<Record<string, RatingSnapshot>>({});
@@ -54,8 +63,14 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
     });
 
     const {data: questions, isLoading, isError} = useQuery({
-        queryKey: ["concept", conceptId, "questions"],
-        queryFn: () => getQuestionsByConceptId(conceptId),
+        // Keep the unscoped key identical to the page's prefetch so global
+        // practice still hydrates from the server.
+        queryKey: curriculumId
+            ? ["concept", conceptId, "questions", "curriculum", curriculumId]
+            : ["concept", conceptId, "questions"],
+        queryFn: () => curriculumId
+            ? getCurriculumQuestionsByConceptId(conceptId, curriculumId)
+            : getQuestionsByConceptId(conceptId),
     });
 
     const questionIds = useMemo(
@@ -280,7 +295,7 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                         {questions?.length ?? 0} questions
                     </span>
                     <span className="rounded-full bg-muted px-3 py-1">
-                        Concept practice
+                        {curriculumId ? "Curriculum practice" : "Concept practice"}
                     </span>
                     {questions?.length ? (
                         <span className="rounded-full bg-muted px-3 py-1">

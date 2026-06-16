@@ -90,7 +90,7 @@ export const subjectTable = pgTable("subjects", {
     slug: varchar({ length: 255 }).unique().notNull(),
 });
 
-//cascading and not nulling -- here
+// Deprecated
 export const topicTable = pgTable("topics", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     subjectId: integer().references(()=>subjectTable.id,{onDelete:"cascade"}).notNull(),

@@ -1,8 +1,10 @@
 import type {Metadata} from "next";
+import {Suspense} from "react";
 import {dehydrate, HydrationBoundary, QueryClient} from "@tanstack/react-query";
 import {notFound, permanentRedirect} from "next/navigation";
 
 import {QuizSolver} from "@/app/(dashboard)/quiz/QuizSolver";
+import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/QuizSolveSkeleton";
 import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
 import {getAllConcepts, getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 import {getAbsoluteUrl} from "@/lib/site-url";
@@ -168,7 +170,13 @@ export default async function SolveConceptPage({params}: SolveConceptPageProps) 
             />
             <HydrationBoundary state={dehydrate(queryClient)}>
                 <div className="px-4 py-6 md:px-6">
-                    <QuizSolver key={conceptId} conceptId={conceptId} />
+                    {/* QuizSolver reads the `curriculum` search param via useSearchParams,
+                        so it needs its own Suspense boundary. Without one, the closest
+                        boundary is the segment's loading.tsx, which would deopt the whole
+                        page (JSON-LD + overview) to client rendering. */}
+                    <Suspense fallback={<QuizSolveSkeleton withPagePadding={false} />}>
+                        <QuizSolver key={conceptId} conceptId={conceptId} />
+                    </Suspense>
                 </div>
             </HydrationBoundary>
             <QuestionOverview questions={questions} />

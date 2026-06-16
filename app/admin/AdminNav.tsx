@@ -27,9 +27,14 @@ const adminNavLinks = [
         isActive: (pathname: string) => pathname.startsWith("/admin/curriculums"),
     },
     {
+        title: "Add questions",
+        href: "/admin/questions/add",
+        isActive: (pathname: string) => pathname.startsWith("/admin/questions/add"),
+    },
+    {
         title: "Migrate questions",
         href: "/admin/questions/migrate",
-        isActive: (pathname: string) => pathname.startsWith("/admin/questions"),
+        isActive: (pathname: string) => pathname.startsWith("/admin/questions/migrate"),
     },
     {
         title: "Topics",

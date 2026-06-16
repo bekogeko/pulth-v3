@@ -1006,6 +1006,58 @@ export async function getQuestionsByConceptId(conceptId: number) {
         );
 }
 
+// Like getQuestionsByConceptId, but restricted to the questions a single
+// curriculum owns. Powers the curriculum-scoped "Practice" action; the unscoped
+// variant above powers "Practice Global Concept".
+export async function getCurriculumQuestionsByConceptId(conceptId: number, curriculumId: number) {
+    if (!Number.isInteger(conceptId) || !Number.isInteger(curriculumId)) {
+        throw new Error("Concept not found");
+    }
+
+    const concept = await database
+        .select({id: conceptTable.id})
+        .from(conceptTable)
+        .where(eq(conceptTable.id, conceptId))
+        .limit(1)
+        .then((results) => results[0]);
+
+    if (!concept) {
+        throw new Error("Concept not found");
+    }
+
+    return database
+        .select({
+            questionId: questionTable.id,
+            question: questionTable.question,
+            body: questionTable.body,
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ) filter (where ${questionOptionTable.id} is not null),
+                    '[]'::json
+                )
+            `,
+        })
+        .from(questionConceptsTable)
+        .innerJoin(questionTable, eq(questionTable.id, questionConceptsTable.questionId))
+        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
+        .where(and(
+            eq(questionConceptsTable.conceptId, concept.id),
+            eq(questionTable.curriculumId, curriculumId),
+        ))
+        .groupBy(
+            questionTable.id,
+            questionTable.question,
+            questionTable.body
+        );
+}
+
 export async function getQuestionsByTopicSlug(slug: string) {
     const topic = await database
         .select({id: topicTable.id})

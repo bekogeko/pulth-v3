@@ -839,6 +839,8 @@ export async function adminSetCurriculumTopicConcept(input: {
 const QUESTION_PROMPT_MAX_LENGTH = 255;
 const QUESTION_BODY_MAX_LENGTH = 1024;
 const QUESTION_EXPLANATION_MAX_LENGTH = 255;
+const QUESTION_OPTION_MAX_LENGTH = 255;
+const QUESTION_MIN_OPTIONS = 2;
 
 type AdminMigrateQuestionInput = {
     questionId: number;
@@ -1033,6 +1035,143 @@ export async function adminMigrateQuestion(input: AdminMigrateQuestionInput): Pr
         return {status: "success", message: "Question migrated."};
     } catch {
         return {status: "error", message: "Unable to migrate the question right now."};
+    }
+}
+
+type AdminCreateQuestionInput = {
+    curriculumId: number;
+    conceptIds: number[];
+    prompt: string;
+    body: string;
+    explanation: string;
+    options: string[];
+    correctIndex: number;
+};
+
+// Authors a brand-new question already scoped to a curriculum (curriculumId set),
+// unlike the Migrate flow which adopts a pre-existing legacy question. Used by the
+// admin "Add question" action on the curriculum topic page.
+export async function adminCreateQuestion(input: AdminCreateQuestionInput): Promise<AdminMutationState> {
+    if (!(await isAdmin())) {
+        return NOT_AUTHORIZED;
+    }
+
+    if (!isPositiveInteger(input.curriculumId)) {
+        return {status: "error", message: "Choose a curriculum."};
+    }
+
+    const prompt = input.prompt.trim();
+    const body = input.body.trim();
+    const explanation = input.explanation.trim();
+
+    if (!prompt) {
+        return {status: "error", message: "Enter a question prompt."};
+    }
+
+    if (prompt.length > QUESTION_PROMPT_MAX_LENGTH) {
+        return {status: "error", message: "Prompt must be 255 characters or fewer."};
+    }
+
+    if (body.length > QUESTION_BODY_MAX_LENGTH) {
+        return {status: "error", message: "Body must be 1024 characters or fewer."};
+    }
+
+    if (explanation.length > QUESTION_EXPLANATION_MAX_LENGTH) {
+        return {status: "error", message: "Explanation must be 255 characters or fewer."};
+    }
+
+    const options = input.options.map((option) => option.trim());
+
+    if (options.length < QUESTION_MIN_OPTIONS) {
+        return {status: "error", message: "Add at least two answer choices."};
+    }
+
+    if (options.some((option) => option.length === 0)) {
+        return {status: "error", message: "Answer choices cannot be empty."};
+    }
+
+    if (options.some((option) => option.length > QUESTION_OPTION_MAX_LENGTH)) {
+        return {status: "error", message: "Each answer choice must be 255 characters or fewer."};
+    }
+
+    if (!Number.isInteger(input.correctIndex) || input.correctIndex < 0 || input.correctIndex >= options.length) {
+        return {status: "error", message: "Choose the correct answer."};
+    }
+
+    const conceptIds = [...new Set(input.conceptIds)].filter((id) => isPositiveInteger(id));
+
+    if (conceptIds.length === 0) {
+        return {status: "error", message: "Select at least one concept."};
+    }
+
+    const pathInfo = await getCurriculumPathInfo(input.curriculumId);
+
+    if (!pathInfo) {
+        return {status: "error", message: "Curriculum not found."};
+    }
+
+    // Every chosen concept must be bound to the curriculum, mirroring the guard
+    // in adminMigrateQuestion.
+    const boundConcepts = await database
+        .select({conceptId: curriculumConcept.conceptId})
+        .from(curriculumConcept)
+        .where(and(
+            eq(curriculumConcept.curriculumId, input.curriculumId),
+            inArray(curriculumConcept.conceptId, conceptIds),
+        ));
+
+    if (boundConcepts.length !== conceptIds.length) {
+        return {status: "error", message: "Every concept must be bound to the chosen curriculum."};
+    }
+
+    try {
+        await database.transaction(async (tx) => {
+            const [question] = await tx
+                .insert(questionTable)
+                .values({
+                    question: prompt,
+                    body: body || null,
+                    explanation: explanation || null,
+                    curriculumId: input.curriculumId,
+                })
+                .returning({id: questionTable.id});
+
+            if (!question) {
+                throw new Error("Question insert did not return an id.");
+            }
+
+            await tx.insert(questionOptionTable).values(
+                options.map((option, index) => ({
+                    questionId: question.id,
+                    option,
+                    isCorrect: index === input.correctIndex,
+                })),
+            );
+
+            await tx.insert(questionConceptsTable).values(
+                conceptIds.map((conceptId) => ({
+                    questionId: question.id,
+                    conceptId,
+                })),
+            );
+        });
+
+        const conceptSlugs = await database
+            .select({slug: conceptTable.slug})
+            .from(conceptTable)
+            .where(inArray(conceptTable.id, conceptIds));
+
+        revalidateCurriculumBindingPaths(pathInfo);
+        revalidatePath("/quiz");
+
+        for (const {slug} of conceptSlugs) {
+            revalidatePath(`/quiz/concepts/${slug}`);
+            revalidatePath(`/quiz/concepts/${slug}/solve`);
+        }
+
+        return {status: "success", message: "Question created."};
+    } catch {
+        return {status: "error", message: "Unable to create the question right now."};
     }
 }
 

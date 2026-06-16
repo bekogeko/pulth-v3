@@ -1,12 +1,13 @@
 import type {Metadata} from "next";
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {ArrowLeft, BookOpenCheck, Sparkles} from "lucide-react";
+import {ArrowLeft, BookOpenCheck, Globe, Sparkles} from "lucide-react";
 
 import {
     getCurriculumTopicDetail,
     getCurriculumTopicSlugs,
 } from "@/app/actions/subject";
+import {AddQuestionButton} from "@/app/(dashboard)/[subjectSlug]/[curriculumSlug]/[topicSlug]/add-question-dialog";
 import {Button} from "@/components/ui/button";
 
 export const revalidate = false;
@@ -153,22 +154,47 @@ export default async function CurriculumTopicPage({params}: CurriculumTopicPageP
                                                 {displayDescription}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
-                                                {concept.questionCount} question{concept.questionCount === 1 ? "" : "s"}
+                                                {concept.curriculumQuestionCount} in this curriculum
+                                                {" · "}
+                                                {concept.questionCount} global
                                             </p>
                                         </div>
-                                        {concept.questionCount > 0 ? (
-                                            <Button asChild size="sm" className="w-full sm:w-auto">
-                                                <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                        <div className="flex w-full flex-col gap-2 sm:w-auto">
+                                            {concept.curriculumQuestionCount > 0 ? (
+                                                <Button asChild size="sm" className="w-full sm:w-auto">
+                                                    <Link
+                                                        href={`/quiz/concepts/${concept.slug}/solve?curriculum=${topic.id}`}
+                                                        prefetch={false}
+                                                    >
+                                                        <Sparkles />
+                                                        Practice
+                                                    </Link>
+                                                </Button>
+                                            ) : (
+                                                <Button size="sm" className="w-full sm:w-auto" disabled>
                                                     <Sparkles />
                                                     Practice
-                                                </Link>
-                                            </Button>
-                                        ) : (
-                                            <Button size="sm" className="w-full sm:w-auto" disabled>
-                                                <Sparkles />
-                                                Practice
-                                            </Button>
-                                        )}
+                                                </Button>
+                                            )}
+                                            {concept.questionCount > 0 ? (
+                                                <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
+                                                    <Link href={`/quiz/concepts/${concept.slug}/solve`} prefetch={false}>
+                                                        <Globe />
+                                                        Practice Global Concept
+                                                    </Link>
+                                                </Button>
+                                            ) : (
+                                                <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled>
+                                                    <Globe />
+                                                    Practice Global Concept
+                                                </Button>
+                                            )}
+                                            <AddQuestionButton
+                                                curriculumId={topic.id}
+                                                conceptId={concept.id}
+                                                conceptName={displayName}
+                                            />
+                                        </div>
                                     </li>
                                 );
                             })}

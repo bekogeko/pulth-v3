@@ -9,6 +9,7 @@ import {
     curriculumTopic,
     curriculumTopicConcepts,
     questionConceptsTable,
+    questionTable,
     subjectTable,
 } from "@/db/schema";
 import {database} from "@/lib/database";
@@ -143,6 +144,8 @@ export async function getCurriculumTopicDetail(subjectSlug: string, curriculumSl
         return null;
     }
 
+    // Global count: every question tagged with the concept, regardless of which
+    // curriculum owns it. Drives the "Practice Global Concept" action.
     const conceptQuestionCountsSq = database
         .select({
             conceptId: questionConceptsTable.conceptId,
@@ -151,6 +154,19 @@ export async function getCurriculumTopicDetail(subjectSlug: string, curriculumSl
         .from(questionConceptsTable)
         .groupBy(questionConceptsTable.conceptId)
         .as("concept_question_counts_sq");
+
+    // Curriculum-scoped count: only questions owned by this curriculum. Drives
+    // the primary "Practice" action.
+    const curriculumConceptQuestionCountsSq = database
+        .select({
+            conceptId: questionConceptsTable.conceptId,
+            questionCount: count(questionConceptsTable.questionId).as("curriculum_question_count"),
+        })
+        .from(questionConceptsTable)
+        .innerJoin(questionTable, eq(questionTable.id, questionConceptsTable.questionId))
+        .where(eq(questionTable.curriculumId, detail.id))
+        .groupBy(questionConceptsTable.conceptId)
+        .as("curriculum_concept_question_counts_sq");
 
     const concepts = await database
         .select({
@@ -161,6 +177,7 @@ export async function getCurriculumTopicDetail(subjectSlug: string, curriculumSl
             localName: curriculumConcept.localName,
             localDescription: curriculumConcept.localDescription,
             questionCount: sql<number>`coalesce(${conceptQuestionCountsSq.questionCount}, 0)`,
+            curriculumQuestionCount: sql<number>`coalesce(${curriculumConceptQuestionCountsSq.questionCount}, 0)`,
         })
         .from(curriculumTopicConcepts)
         .innerJoin(curriculumConcept, and(
@@ -169,6 +186,7 @@ export async function getCurriculumTopicDetail(subjectSlug: string, curriculumSl
         ))
         .innerJoin(conceptTable, eq(curriculumTopicConcepts.conceptId, conceptTable.id))
         .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
+        .leftJoin(curriculumConceptQuestionCountsSq, eq(conceptTable.id, curriculumConceptQuestionCountsSq.conceptId))
         .where(and(
             eq(curriculumTopicConcepts.curriculumId, detail.id),
             eq(curriculumTopicConcepts.curriculumTopicId, detail.topicId),
@@ -180,6 +198,7 @@ export async function getCurriculumTopicDetail(subjectSlug: string, curriculumSl
         concepts: concepts.map((concept) => ({
             ...concept,
             questionCount: Number(concept.questionCount),
+            curriculumQuestionCount: Number(concept.curriculumQuestionCount),
         })),
     };
 }
