@@ -11,8 +11,6 @@ import {
     questionOptionTable,
     questionTable,
     ratingEventTable,
-    topicConceptsTable,
-    topicTable,
     userAnswerTable,
     userConceptRatingTable,
 } from "@/db/schema";
@@ -368,12 +366,7 @@ export async function getSimilarQuestions(input: {
     }));
 }
 
-function selectTopicsWithConcepts(topicSlug?: string) {
-    type TopicConceptJson = ConceptJson & {
-        slug: string;
-        questionCount: number;
-    };
-
+export async function getConceptsForPractice() {
     const conceptQuestionCountsSq = database
         .select({
             conceptId: questionConceptsTable.conceptId,
@@ -385,41 +378,15 @@ function selectTopicsWithConcepts(topicSlug?: string) {
 
     return database
         .select({
-            id: topicTable.id,
-            slug: topicTable.slug,
-            title: topicTable.title,
-            description: topicTable.description,
-            concepts: sql<TopicConceptJson[]>`
-                coalesce(
-                    json_agg(
-                        json_build_object(
-                            'id', ${conceptTable.id},
-                            'slug', ${conceptTable.slug},
-                            'name', ${conceptTable.name},
-                            'description', ${conceptTable.description},
-                            'questionCount', coalesce(${conceptQuestionCountsSq.questionCount}, 0)
-                        )
-                        order by ${conceptTable.name}
-                    ) filter (where ${conceptTable.id} is not null),
-                    '[]'::json
-                )
-            `,
+            id: conceptTable.id,
+            slug: conceptTable.slug,
+            name: conceptTable.name,
+            description: conceptTable.description,
+            questionCount: sql<number>`coalesce(${conceptQuestionCountsSq.questionCount}, 0)`,
         })
-        .from(topicTable)
-        .leftJoin(topicConceptsTable, eq(topicTable.id, topicConceptsTable.topicId))
-        .leftJoin(conceptTable, eq(topicConceptsTable.conceptId, conceptTable.id))
+        .from(conceptTable)
         .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
-        .where(topicSlug === undefined ? undefined : eq(topicTable.slug, topicSlug))
-        .groupBy(topicTable.id)
-        .orderBy(asc(topicTable.title));
-}
-
-export async function getAllTopicsWithConcepts() {
-    return selectTopicsWithConcepts();
-}
-
-export async function getTopicWithConceptsBySlug(slug: string) {
-    return selectTopicsWithConcepts(slug);
+        .orderBy(asc(conceptTable.name));
 }
 
 export async function getMyQuestions() {
@@ -1058,53 +1025,3 @@ export async function getCurriculumQuestionsByConceptId(conceptId: number, curri
         );
 }
 
-export async function getQuestionsByTopicSlug(slug: string) {
-    const topic = await database
-        .select({id: topicTable.id})
-        .from(topicTable)
-        .where(eq(topicTable.slug, slug))
-        .limit(1)
-        .then((results) => results[0]);
-
-    if (!topic) {
-        throw new Error("Topic not found");
-    }
-
-    // A question can belong to several concepts of the same topic, so collapse
-    // the concept links before joining options.
-    const topicQuestionIdsSq = database
-        .selectDistinct({questionId: questionConceptsTable.questionId})
-        .from(questionConceptsTable)
-        .innerJoin(topicConceptsTable, eq(topicConceptsTable.conceptId, questionConceptsTable.conceptId))
-        .where(eq(topicConceptsTable.topicId, topic.id))
-        .as("topic_question_ids_sq");
-
-    return database
-        .select({
-            questionId: questionTable.id,
-            question: questionTable.question,
-            body: questionTable.body,
-            options: sql<QuestionOptionJson[]>`
-                coalesce(
-                    json_agg(
-                        json_build_object(
-                            'id', ${questionOptionTable.id},
-                            'option', ${questionOptionTable.option},
-                            'isCorrect', ${questionOptionTable.isCorrect}
-                        )
-                        order by ${questionOptionTable.id}
-                    ) filter (where ${questionOptionTable.id} is not null),
-                    '[]'::json
-                )
-            `,
-        })
-        .from(questionTable)
-        .innerJoin(topicQuestionIdsSq, eq(questionTable.id, topicQuestionIdsSq.questionId))
-        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
-        .groupBy(
-            questionTable.id,
-            questionTable.question,
-            questionTable.body
-        )
-        .orderBy(asc(questionTable.id));
-}

@@ -41,7 +41,6 @@ export function SubjectDialog({open, onOpenChange, subject}: SubjectDialogProps)
             }
 
             await queryClient.invalidateQueries({queryKey: ["admin", "subjects"]});
-            await queryClient.invalidateQueries({queryKey: ["admin", "topics"]});
             toast.success(result.message);
             onOpenChange(false);
         },

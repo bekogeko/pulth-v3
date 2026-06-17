@@ -90,35 +90,12 @@ export const subjectTable = pgTable("subjects", {
     slug: varchar({ length: 255 }).unique().notNull(),
 });
 
-// Deprecated
-export const topicTable = pgTable("topics", {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    subjectId: integer().references(()=>subjectTable.id,{onDelete:"cascade"}).notNull(),
-    title: varchar({ length: 255 }).notNull(),
-    description: varchar({ length: 255 }).notNull(),
-    slug: varchar({ length: 127 }).unique().notNull(),
-});
-
 export const articleConceptsTable = pgTable("article_concepts", {
     articleId: integer("article_id").references(() => articleTable.id, {onDelete: "cascade"}).notNull(),
     conceptId: integer("concept_id").references(() => conceptTable.id, {onDelete: "cascade"}).notNull(),
 }, (t) => ({
     pk: primaryKey({columns: [t.articleId, t.conceptId]}),
 }));
-
-export const articleTopicsTable = pgTable("article_topics", {
-    articleId: integer("article_id").references(() => articleTable.id, {onDelete: "cascade"}).notNull(),
-    topicId: integer("topic_id").references(() => topicTable.id, {onDelete: "cascade"}).notNull(),
-}, (t) => ({
-    pk: primaryKey({columns: [t.articleId, t.topicId]}),
-}));
-
-export const topicConceptsTable = pgTable("topic_concepts", {
-    topicId: integer().references(()=>topicTable.id,{onDelete:"cascade"}).notNull(),
-    conceptId: integer().references(()=>conceptTable.id,{onDelete:"cascade"}).notNull(),
-},(t)=>({
-    pk: primaryKey({columns:[t.topicId,t.conceptId]})
-}))
 
 
 /// Snapshot of user answer. immutable
@@ -228,4 +205,11 @@ export const curriculumTopicConcepts = pgTable("curriculumTopics_concepts", {
         columns: [t.curriculumId, t.conceptId],
         foreignColumns: [curriculumConcept.curriculumId, curriculumConcept.conceptId],
     }).onDelete("cascade"),
+}))
+
+export const articleCurriculumTopicsTable = pgTable("article_curriculum_topics", {
+    articleId: integer("article_id").references(() => articleTable.id, {onDelete: "cascade"}).notNull(),
+    curriculumTopicId: integer("curriculum_topic_id").references(() => curriculumTopic.id, {onDelete: "cascade"}).notNull(),
+}, (t) => ({
+    pk: primaryKey({columns: [t.articleId, t.curriculumTopicId]}),
 }))

@@ -41,7 +41,6 @@ export default function AdminSubjectsPage() {
             }
 
             await queryClient.invalidateQueries({queryKey: ["admin", "subjects"]});
-            await queryClient.invalidateQueries({queryKey: ["admin", "topics"]});
             toast.success(result.message);
             setDeleteTarget(null);
         },
@@ -118,7 +117,6 @@ export default function AdminSubjectsPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Name</TableHead>
-                                <TableHead>Topics</TableHead>
                                 <TableHead className="w-24 text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -126,9 +124,6 @@ export default function AdminSubjectsPage() {
                             {subjects?.length ? subjects.map((subject) => (
                                 <TableRow key={subject.id}>
                                     <TableCell className="font-medium">{subject.name}</TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {subject.topicCount}
-                                    </TableCell>
                                     <TableCell>
                                         <div className="flex justify-end gap-1">
                                             <Button
@@ -154,7 +149,7 @@ export default function AdminSubjectsPage() {
                                 </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="h-32 text-center text-muted-foreground">
+                                    <TableCell colSpan={2} className="h-32 text-center text-muted-foreground">
                                         No subjects yet.
                                     </TableCell>
                                 </TableRow>

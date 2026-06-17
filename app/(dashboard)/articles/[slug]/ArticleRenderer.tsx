@@ -17,6 +17,8 @@ type ArticleTopic = {
     id: number;
     title: string;
     slug: string;
+    curriculumSlug: string;
+    subjectSlug: string;
 };
 
 function Header(props: { level: number; children: ReactNode }) {
@@ -133,7 +135,7 @@ function RelatedQuizLinks(props: {
                                 {props.topics.map((topic) => (
                                     <Link
                                         key={topic.id}
-                                        href={`/quiz?topic=${encodeURIComponent(topic.slug)}`}
+                                        href={`/${topic.subjectSlug}/${topic.curriculumSlug}/${topic.slug}`}
                                         className="group flex items-center justify-between gap-3 rounded-md border border-border/80 px-3 py-2 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/5"
                                     >
                                         <span className="flex min-w-0 items-center gap-2">
@@ -145,7 +147,7 @@ function RelatedQuizLinks(props: {
                                 ))}
                             </div>
                             <p className="text-xs leading-5 text-muted-foreground">
-                                Topic links open the selected quiz topic so you can choose a concept to solve.
+                                Topic links open the related curriculum topic and its mapped concepts.
                             </p>
                         </div>
                     ) : null}

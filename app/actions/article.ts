@@ -2,10 +2,12 @@
 
 import {
     articleConceptsTable,
+    articleCurriculumTopicsTable,
     articleTable,
-    articleTopicsTable,
     conceptTable,
-    topicTable
+    curriculum,
+    curriculumTopic,
+    subjectTable,
 } from "@/db/schema";
 import {database} from "@/lib/database";
 import type {EditorJsOutput} from "@/schemas/EditorTypes";
@@ -29,7 +31,7 @@ type ArticleMutationState = {
 type ArticleTaxonomyInput = {
     articleId: number;
     conceptIds: number[];
-    topicIds: number[];
+    curriculumTopicIds: number[];
 };
 
 const ARTICLE_SLUG_RANDOM_ID_LENGTH = 8;
@@ -83,7 +85,7 @@ function isEditorJsOutput(value: unknown): value is EditorJsOutput {
     return Array.isArray(blocks);
 }
 
-async function assertTaxonomyExists(conceptIds: number[], topicIds: number[]) {
+async function assertTaxonomyExists(conceptIds: number[], curriculumTopicIds: number[]) {
     if (conceptIds.length > 0) {
         const existingConcepts = await database
             .select({id: conceptTable.id})
@@ -95,14 +97,14 @@ async function assertTaxonomyExists(conceptIds: number[], topicIds: number[]) {
         }
     }
 
-    if (topicIds.length > 0) {
+    if (curriculumTopicIds.length > 0) {
         const existingTopics = await database
-            .select({id: topicTable.id})
-            .from(topicTable)
-            .where(inArray(topicTable.id, topicIds));
+            .select({id: curriculumTopic.id})
+            .from(curriculumTopic)
+            .where(inArray(curriculumTopic.id, curriculumTopicIds));
 
-        if (existingTopics.length !== topicIds.length) {
-            return "One or more topics could not be found.";
+        if (existingTopics.length !== curriculumTopicIds.length) {
+            return "One or more curriculum topics could not be found.";
         }
     }
 
@@ -112,7 +114,7 @@ async function assertTaxonomyExists(conceptIds: number[], topicIds: number[]) {
 async function updateArticleTaxonomy(tx: Parameters<Parameters<typeof database.transaction>[0]>[0], {
     articleId,
     conceptIds,
-    topicIds,
+    curriculumTopicIds,
 }: ArticleTaxonomyInput) {
     await tx
         .delete(articleConceptsTable)
@@ -128,14 +130,14 @@ async function updateArticleTaxonomy(tx: Parameters<Parameters<typeof database.t
     }
 
     await tx
-        .delete(articleTopicsTable)
-        .where(eq(articleTopicsTable.articleId, articleId));
+        .delete(articleCurriculumTopicsTable)
+        .where(eq(articleCurriculumTopicsTable.articleId, articleId));
 
-    if (topicIds.length > 0) {
-        await tx.insert(articleTopicsTable).values(
-            topicIds.map((topicId) => ({
+    if (curriculumTopicIds.length > 0) {
+        await tx.insert(articleCurriculumTopicsTable).values(
+            curriculumTopicIds.map((curriculumTopicId) => ({
                 articleId,
-                topicId,
+                curriculumTopicId,
             }))
         );
     }
@@ -176,6 +178,8 @@ export async function getArticleBySlug(slug: string) {
         id: number;
         title: string;
         slug: string;
+        curriculumSlug: string;
+        subjectSlug: string;
     };
 
     const conceptsSq = database
@@ -205,19 +209,23 @@ export async function getArticleBySlug(slug: string) {
                 coalesce(
                     json_agg(
                         json_build_object(
-                            'id', ${topicTable.id},
-                            'title', ${topicTable.title},
-                            'slug', ${topicTable.slug}
+                            'id', ${curriculumTopic.id},
+                            'title', ${curriculumTopic.name},
+                            'slug', ${curriculumTopic.slug},
+                            'curriculumSlug', ${curriculum.slug},
+                            'subjectSlug', ${subjectTable.slug}
                         )
-                        order by ${topicTable.title}
+                        order by ${curriculumTopic.name}
                     ),
                     '[]'::json
                 )
             `.as("topics"),
         })
-        .from(articleTopicsTable)
-        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
-        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .from(articleCurriculumTopicsTable)
+        .innerJoin(curriculumTopic, eq(articleCurriculumTopicsTable.curriculumTopicId, curriculumTopic.id))
+        .innerJoin(curriculum, eq(curriculumTopic.curriculumId, curriculum.id))
+        .innerJoin(subjectTable, eq(curriculum.subjectId, subjectTable.id))
+        .where(eq(articleCurriculumTopicsTable.articleId, articleTable.id))
         .as("published_article_topics_sq");
 
     const [article] = await database
@@ -288,18 +296,18 @@ export async function getMyArticles() {
                 coalesce(
                     json_agg(
                         json_build_object(
-                            'id', ${topicTable.id},
-                            'title', ${topicTable.title}
+                            'id', ${curriculumTopic.id},
+                            'title', ${curriculumTopic.name}
                         )
-                        order by ${topicTable.title}
+                        order by ${curriculumTopic.name}
                     ),
                     '[]'::json
                 )
             `.as("topics"),
         })
-        .from(articleTopicsTable)
-        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
-        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .from(articleCurriculumTopicsTable)
+        .innerJoin(curriculumTopic, eq(articleCurriculumTopicsTable.curriculumTopicId, curriculumTopic.id))
+        .where(eq(articleCurriculumTopicsTable.articleId, articleTable.id))
         .as("article_topics_sq");
 
     return database
@@ -332,7 +340,7 @@ export async function getArticleEditorOptions() {
         };
     }
 
-    const [concepts, topics] = await Promise.all([
+    const [concepts, topicRows] = await Promise.all([
         database
             .select({
                 id: conceptTable.id,
@@ -342,16 +350,21 @@ export async function getArticleEditorOptions() {
             .orderBy(asc(conceptTable.name)),
         database
             .select({
-                id: topicTable.id,
-                title: topicTable.title,
+                id: curriculumTopic.id,
+                name: curriculumTopic.name,
+                curriculumName: curriculum.name,
             })
-            .from(topicTable)
-            .orderBy(asc(topicTable.title)),
+            .from(curriculumTopic)
+            .innerJoin(curriculum, eq(curriculumTopic.curriculumId, curriculum.id))
+            .orderBy(asc(curriculum.name), asc(curriculumTopic.name)),
     ]);
 
     return {
         concepts,
-        topics,
+        topics: topicRows.map((topic) => ({
+            id: topic.id,
+            title: `${topic.curriculumName} › ${topic.name}`,
+        })),
     };
 }
 
@@ -398,18 +411,18 @@ export async function getMyArticleForEdit(slug: string) {
                 coalesce(
                     json_agg(
                         json_build_object(
-                            'id', ${topicTable.id},
-                            'title', ${topicTable.title}
+                            'id', ${curriculumTopic.id},
+                            'title', ${curriculumTopic.name}
                         )
-                        order by ${topicTable.title}
+                        order by ${curriculumTopic.name}
                     ),
                     '[]'::json
                 )
             `.as("topics"),
         })
-        .from(articleTopicsTable)
-        .innerJoin(topicTable, eq(articleTopicsTable.topicId, topicTable.id))
-        .where(eq(articleTopicsTable.articleId, articleTable.id))
+        .from(articleCurriculumTopicsTable)
+        .innerJoin(curriculumTopic, eq(articleCurriculumTopicsTable.curriculumTopicId, curriculumTopic.id))
+        .where(eq(articleCurriculumTopicsTable.articleId, articleTable.id))
         .as("article_editor_topics_sq");
 
     const [article] = await database
@@ -491,7 +504,7 @@ export async function saveArticleDraft(input: {
     description: string;
     body: EditorJsOutput;
     conceptIds: number[];
-    topicIds: number[];
+    curriculumTopicIds: number[];
 }) {
     const {isAuthenticated, userId} = await auth();
 
@@ -502,7 +515,7 @@ export async function saveArticleDraft(input: {
     const title = input.title.trim();
     const description = input.description.trim();
     const conceptIds = normalizeIds(input.conceptIds);
-    const topicIds = normalizeIds(input.topicIds);
+    const curriculumTopicIds = normalizeIds(input.curriculumTopicIds);
 
     if (!title) {
         return {status: "error" as const, message: "Enter a title."};
@@ -520,7 +533,7 @@ export async function saveArticleDraft(input: {
         return {status: "error" as const, message: "Article body is not valid EditorJS data."};
     }
 
-    const taxonomyError = await assertTaxonomyExists(conceptIds, topicIds);
+    const taxonomyError = await assertTaxonomyExists(conceptIds, curriculumTopicIds);
     if (taxonomyError) {
         return {status: "error" as const, message: taxonomyError};
     }
@@ -560,7 +573,7 @@ export async function saveArticleDraft(input: {
             await updateArticleTaxonomy(tx, {
                 articleId: article.id,
                 conceptIds,
-                topicIds,
+                curriculumTopicIds,
             });
         });
 

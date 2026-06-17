@@ -30,11 +30,6 @@ export default async function AdminOverviewPage() {
             hint: null,
         },
         {
-            label: "Topics",
-            value: stats.topics,
-            hint: null,
-        },
-        {
             label: "Subjects",
             value: stats.subjects,
             hint: null,

@@ -43,7 +43,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
     const [selectedConceptIds, setSelectedConceptIds] = useState(
         () => article.concepts.map((concept) => concept.id)
     );
-    const [selectedTopicIds, setSelectedTopicIds] = useState(
+    const [selectedCurriculumTopicIds, setSelectedCurriculumTopicIds] = useState(
         () => article.topics.map((topic) => topic.id)
     );
     const [isPublished, setIsPublished] = useState(article.isPublished);
@@ -130,11 +130,11 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
         ));
     }
 
-    function toggleTopic(topicId: number) {
-        setSelectedTopicIds((currentIds) => (
-            currentIds.includes(topicId)
-                ? currentIds.filter((id) => id !== topicId)
-                : [...currentIds, topicId]
+    function toggleCurriculumTopic(curriculumTopicId: number) {
+        setSelectedCurriculumTopicIds((currentIds) => (
+            currentIds.includes(curriculumTopicId)
+                ? currentIds.filter((id) => id !== curriculumTopicId)
+                : [...currentIds, curriculumTopicId]
         ));
     }
 
@@ -155,7 +155,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                 description,
                 body,
                 conceptIds: selectedConceptIds,
-                topicIds: selectedTopicIds,
+                curriculumTopicIds: selectedCurriculumTopicIds,
             });
 
             if (result.status === "success") {
@@ -179,7 +179,7 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                 description,
                 body,
                 conceptIds: selectedConceptIds,
-                topicIds: selectedTopicIds,
+                curriculumTopicIds: selectedCurriculumTopicIds,
             });
 
             if (saveResult.status === "error") {
@@ -303,14 +303,14 @@ export function ArticleEditor({article, concepts, topics}: ArticleEditorProps) {
                         onToggle={toggleConcept}
                     />
                     <TaxonomySection
-                        title="Topics"
-                        emptyLabel="No topics available"
+                        title="Curriculum topics"
+                        emptyLabel="No curriculum topics available"
                         options={topics.map((topic) => ({
                             id: topic.id,
                             label: topic.title,
                         }))}
-                        selectedIds={selectedTopicIds}
-                        onToggle={toggleTopic}
+                        selectedIds={selectedCurriculumTopicIds}
+                        onToggle={toggleCurriculumTopic}
                     />
                 </aside>
             </div>

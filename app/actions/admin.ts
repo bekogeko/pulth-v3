@@ -7,7 +7,6 @@ import {revalidatePath} from "next/cache";
 import {
     articleConceptsTable,
     articleTable,
-    articleTopicsTable,
     conceptTable,
     curriculum,
     curriculumConcept,
@@ -19,7 +18,6 @@ import {
     questionTable,
     ratingEventTable,
     subjectTable,
-    topicTable,
     userAnswerTable,
 } from "@/db/schema";
 import {isAdmin} from "@/lib/admin";
@@ -37,7 +35,6 @@ const NOT_AUTHORIZED: AdminMutationState = {
 
 const CONCEPT_SLUG_MAX_LENGTH = 255;
 const CURRICULUM_LOCAL_FIELD_MAX_LENGTH = 255;
-const TOPIC_SLUG_MAX_LENGTH = 127;
 const SUBJECT_SLUG_MAX_LENGTH = 255;
 const SLUG_SUFFIX_RESERVE = 8;
 
@@ -95,7 +92,7 @@ export async function getAdminOverview() {
 
     const countOf = async (query: Promise<{value: number}[]>) => (await query)[0]?.value ?? 0;
 
-    const [articles, publishedArticles, questions, concepts, curriculums, topics, subjects, answers] = await Promise.all([
+    const [articles, publishedArticles, questions, concepts, curriculums, subjects, answers] = await Promise.all([
         countOf(database.select({value: count()}).from(articleTable)),
         countOf(
             database
@@ -106,7 +103,6 @@ export async function getAdminOverview() {
         countOf(database.select({value: count()}).from(questionTable)),
         countOf(database.select({value: count()}).from(conceptTable)),
         countOf(database.select({value: count()}).from(curriculum)),
-        countOf(database.select({value: count()}).from(topicTable)),
         countOf(database.select({value: count()}).from(subjectTable)),
         countOf(database.select({value: count()}).from(userAnswerTable)),
     ]);
@@ -117,7 +113,6 @@ export async function getAdminOverview() {
         questions,
         concepts,
         curriculums,
-        topics,
         subjects,
         answers,
     };
@@ -1242,180 +1237,6 @@ export async function adminDiscardQuestion(questionId: number): Promise<AdminMut
     }
 }
 
-// --- Topics ---
-
-async function topicSlugExists(candidate: string, excludeId?: number) {
-    const [existing] = await database
-        .select({id: topicTable.id})
-        .from(topicTable)
-        .where(excludeId === undefined
-            ? eq(topicTable.slug, candidate)
-            : and(eq(topicTable.slug, candidate), ne(topicTable.id, excludeId)))
-        .limit(1);
-
-    return Boolean(existing);
-}
-
-export async function getAdminTopics() {
-    if (!(await isAdmin())) {
-        return [];
-    }
-
-    return database
-        .select({
-            id: topicTable.id,
-            title: topicTable.title,
-            slug: topicTable.slug,
-            description: topicTable.description,
-            subjectId: topicTable.subjectId,
-            subjectName: subjectTable.name,
-            articleCount: countDistinct(articleTopicsTable.articleId),
-        })
-        .from(topicTable)
-        .innerJoin(subjectTable, eq(topicTable.subjectId, subjectTable.id))
-        .leftJoin(articleTopicsTable, eq(articleTopicsTable.topicId, topicTable.id))
-        .groupBy(topicTable.id, subjectTable.id)
-        .orderBy(asc(topicTable.title));
-}
-
-async function validateTopicInput(subjectId: number, title: string, description: string): Promise<AdminMutationState | null> {
-    if (!title) {
-        return {status: "error", message: "Enter a title."};
-    }
-
-    if (title.length > 255) {
-        return {status: "error", message: "Title must be 255 characters or fewer."};
-    }
-
-    if (!description) {
-        return {status: "error", message: "Enter a description."};
-    }
-
-    if (description.length > 255) {
-        return {status: "error", message: "Description must be 255 characters or fewer."};
-    }
-
-    if (!Number.isInteger(subjectId) || subjectId <= 0) {
-        return {status: "error", message: "Choose a subject."};
-    }
-
-    const [subject] = await database
-        .select({id: subjectTable.id})
-        .from(subjectTable)
-        .where(eq(subjectTable.id, subjectId))
-        .limit(1);
-
-    if (!subject) {
-        return {status: "error", message: "The chosen subject could not be found."};
-    }
-
-    return null;
-}
-
-export async function createTopic(input: {subjectId: number; title: string; description: string}): Promise<AdminMutationState> {
-    if (!(await isAdmin())) {
-        return NOT_AUTHORIZED;
-    }
-
-    const title = input.title.trim();
-    const description = input.description.trim();
-
-    const validationError = await validateTopicInput(input.subjectId, title, description);
-    if (validationError) {
-        return validationError;
-    }
-
-    const slug = await createUniqueSlug({
-        title,
-        maxLength: TOPIC_SLUG_MAX_LENGTH,
-        fallback: "topic",
-        exists: (candidate) => topicSlugExists(candidate),
-    });
-
-    try {
-        await database.insert(topicTable).values({
-            subjectId: input.subjectId,
-            title,
-            description,
-            slug,
-        });
-
-        return {status: "success", message: "Topic created."};
-    } catch {
-        return {status: "error", message: "Unable to create the topic right now."};
-    }
-}
-
-export async function updateTopic(input: {
-    id: number;
-    subjectId: number;
-    title: string;
-    description: string;
-}): Promise<AdminMutationState> {
-    if (!(await isAdmin())) {
-        return NOT_AUTHORIZED;
-    }
-
-    const title = input.title.trim();
-    const description = input.description.trim();
-
-    const validationError = await validateTopicInput(input.subjectId, title, description);
-    if (validationError) {
-        return validationError;
-    }
-
-    const [topic] = await database
-        .select({
-            id: topicTable.id,
-            title: topicTable.title,
-            slug: topicTable.slug,
-        })
-        .from(topicTable)
-        .where(eq(topicTable.id, input.id))
-        .limit(1);
-
-    if (!topic) {
-        return {status: "error", message: "Topic not found."};
-    }
-
-    const slug = title === topic.title ? topic.slug : await createUniqueSlug({
-        title,
-        maxLength: TOPIC_SLUG_MAX_LENGTH,
-        fallback: "topic",
-        exists: (candidate) => topicSlugExists(candidate, topic.id),
-    });
-
-    try {
-        await database
-            .update(topicTable)
-            .set({
-                subjectId: input.subjectId,
-                title,
-                description,
-                slug,
-            })
-            .where(eq(topicTable.id, topic.id));
-
-        return {status: "success", message: "Topic updated."};
-    } catch {
-        return {status: "error", message: "Unable to update the topic right now."};
-    }
-}
-
-export async function deleteTopic(topicId: number): Promise<AdminMutationState> {
-    if (!(await isAdmin())) {
-        return NOT_AUTHORIZED;
-    }
-
-    try {
-        await database.delete(topicTable).where(eq(topicTable.id, topicId));
-
-        return {status: "success", message: "Topic deleted."};
-    } catch {
-        return {status: "error", message: "Unable to delete the topic right now."};
-    }
-}
-
 // --- Subjects ---
 
 async function subjectSlugExists(candidate: string, excludeId?: number) {
@@ -1439,11 +1260,8 @@ export async function getAdminSubjects() {
         .select({
             id: subjectTable.id,
             name: subjectTable.name,
-            topicCount: count(topicTable.id),
         })
         .from(subjectTable)
-        .leftJoin(topicTable, eq(topicTable.subjectId, subjectTable.id))
-        .groupBy(subjectTable.id)
         .orderBy(asc(subjectTable.name));
 }
 

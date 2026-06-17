@@ -20,7 +20,7 @@ export default function ConceptNotFound() {
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
                 <Button asChild>
-                    <Link href="/quiz">Browse topics</Link>
+                    <Link href="/quiz">Browse concepts</Link>
                 </Button>
                 <Button asChild variant="outline">
                     <Link href="/">Go home</Link>
