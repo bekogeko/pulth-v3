@@ -172,7 +172,7 @@ export const curriculumTopic = pgTable("curriculumTopics", {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     curriculumId: integer().references(()=>curriculum.id,{onDelete:"cascade"}).notNull(),
     name: varchar({ length: 255 }).notNull(),
-    slug: varchar({ length: 255 }).notNull(),
+    slug: varchar({ length: 255 }).notNull().unique(),
     description: varchar({ length: 255 }).notNull(),
     position: integer()
 },(t)=>({

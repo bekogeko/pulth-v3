@@ -1,0 +1,1 @@
+ALTER TABLE "curriculumTopics" ADD CONSTRAINT "curriculumTopics_slug_unique" UNIQUE("slug");

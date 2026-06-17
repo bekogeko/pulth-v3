@@ -271,9 +271,12 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                                 </>
                             ) : (
                                 <>
-                                    <h1 className="text-2xl font-semibold leading-none tracking-tight">
+                                    {/* The real <h1> is server-rendered on the solve page;
+                                        keep this visible title as a styled div to avoid a
+                                        duplicate heading after hydration. */}
+                                    <div className="text-2xl font-semibold leading-none tracking-tight">
                                         {concept?.name ?? "Concept"}
-                                    </h1>
+                                    </div>
                                     <CardDescription className="max-w-2xl text-sm leading-6">
                                         {concept?.description ?? "Choose one answer for each question."}
                                     </CardDescription>

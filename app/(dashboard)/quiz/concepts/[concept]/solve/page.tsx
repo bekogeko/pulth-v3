@@ -24,13 +24,27 @@ type SolveConceptPageProps = {
 type ConceptQuestion = Awaited<ReturnType<typeof getQuestionsByConceptId>>[number];
 
 function createDescription(name: string, description: string | null | undefined, questionCount: number) {
-    const prefix = questionCount > 0
-        ? `Practice ${questionCount} ${questionCount === 1 ? "question" : "questions"} for ${name}.`
-        : `Practice questions for ${name}.`;
+    const lead = questionCount > 0
+        ? `Practice ${name} with ${questionCount} ${questionCount === 1 ? "question" : "questions"} on Pulth.`
+        : `Practice ${name} on Pulth.`;
+    // Generic detail keeps the meta description from being flagged as too short
+    // when a concept has no stored description (the common case).
+    const generic = "Answer interactive multiple-choice questions, check your answers instantly, and track your progress as you learn.";
     const body = description?.trim();
-    const value = body ? `${prefix} ${body}` : prefix;
 
-    return value.length > 160 ? `${value.slice(0, 157).trimEnd()}...` : value;
+    let value = body ? `${lead} ${body}` : `${lead} ${generic}`;
+    if (value.length < 120) {
+        value = `${value} ${generic}`;
+    }
+
+    if (value.length <= 160) {
+        return value;
+    }
+
+    // Truncate on a word boundary so the description reads cleanly.
+    const truncated = value.slice(0, 157);
+    const lastSpace = truncated.lastIndexOf(" ");
+    return `${(lastSpace > 140 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}...`;
 }
 
 function createConceptJsonLd(
@@ -170,6 +184,11 @@ export default async function SolveConceptPage({params}: SolveConceptPageProps) 
             />
             <HydrationBoundary state={dehydrate(queryClient)}>
                 <div className="px-4 py-6 md:px-6">
+                    {/* Server-rendered h1 so crawlers (and assistive tech) always get a
+                        page heading. QuizSolver renders the visible concept title, but it
+                        reads useSearchParams() and so deopts to its Suspense fallback in the
+                        prerendered HTML — leaving no h1 in the static markup without this. */}
+                    <h1 className="sr-only">{concept.name}</h1>
                     {/* QuizSolver reads the `curriculum` search param via useSearchParams,
                         so it needs its own Suspense boundary. Without one, the closest
                         boundary is the segment's loading.tsx, which would deopt the whole
