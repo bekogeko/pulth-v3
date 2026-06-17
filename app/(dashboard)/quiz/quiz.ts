@@ -1,7 +1,7 @@
 "use server";
 
 import {auth} from "@clerk/nextjs/server";
-import {and, asc, count, eq, inArray, sql} from "drizzle-orm";
+import {and, asc, count, desc, eq, inArray, sql} from "drizzle-orm";
 import {revalidatePath} from "next/cache";
 
 import {
@@ -386,7 +386,10 @@ export async function getConceptsForPractice() {
         })
         .from(conceptTable)
         .leftJoin(conceptQuestionCountsSq, eq(conceptTable.id, conceptQuestionCountsSq.conceptId))
-        .orderBy(asc(conceptTable.name));
+        .orderBy(
+            desc(sql`coalesce(${conceptQuestionCountsSq.questionCount}, 0)`),
+            asc(conceptTable.name),
+        );
 }
 
 export async function getMyQuestions() {
