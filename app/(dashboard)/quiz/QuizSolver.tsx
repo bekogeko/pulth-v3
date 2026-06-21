@@ -141,6 +141,8 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
         return questions.filter((question) => checkedQuestions[question.questionId]).length;
     }, [checkedQuestions, questions]);
     const currentQuestionHash = currentQuestion && !isComplete ? slugifyQuestion(currentQuestion.question) : "";
+    const totalQuestions = questions?.length ?? 0;
+    const progressPercent = totalQuestions > 0 ? Math.round((checkedCount / totalQuestions) * 100) : 0;
 
     useEffect(() => {
         if (!questions?.length) {
@@ -261,6 +263,19 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
     return (
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
             <Card className="overflow-hidden border-border/70 shadow-sm">
+                <div
+                    className="h-1.5 w-full bg-muted"
+                    role="progressbar"
+                    aria-label="Quiz progress"
+                    aria-valuemin={0}
+                    aria-valuemax={totalQuestions}
+                    aria-valuenow={checkedCount}
+                >
+                    <div
+                        className="h-full bg-primary transition-[width] duration-300 ease-out"
+                        style={{width: `${progressPercent}%`}}
+                    />
+                </div>
                 <CardHeader className="gap-4 border-b border-border/60 bg-gradient-to-br from-primary/8 via-background to-background">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="space-y-2">
@@ -282,14 +297,6 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                                     </CardDescription>
                                 </>
                             )}
-                        </div>
-                        <div className="flex items-center gap-3 self-start rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-xs backdrop-blur">
-                            <div className="space-y-0.5">
-                                <p className="text-muted-foreground">Progress</p>
-                                <p className="font-medium text-foreground">
-                                    {checkedCount}/{questions?.length ?? 0} solved
-                                </p>
-                            </div>
                         </div>
                     </div>
                 </CardHeader>
