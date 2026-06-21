@@ -41,6 +41,19 @@ function slugifyQuestion(value: string) {
         .slice(0, 80) || "question";
 }
 
+// Fisher–Yates. Reorders array position only; option ids and isCorrect flags are
+// untouched, so scoring and answer-checking stay correct.
+function shuffle<T>(items: T[]): T[] {
+    const shuffled = [...items];
+
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+    }
+
+    return shuffled;
+}
+
 export function QuizSolver({conceptId}: QuizSolverProps) {
     const queryClient = useQueryClient();
     const searchParams = useSearchParams();
@@ -56,13 +69,15 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [isComplete, setIsComplete] = useState(false);
     const [hasProcessedInitialHash, setHasProcessedInitialHash] = useState(false);
+    // Bumped on restart to reshuffle options for the next session.
+    const [shuffleKey, setShuffleKey] = useState(0);
 
     const {data: conceptData, isLoading: isConceptLoading} = useQuery({
         queryKey: ["concept", conceptId],
         queryFn: () => getConceptById(conceptId),
     });
 
-    const {data: questions, isLoading, isError} = useQuery({
+    const {data: rawQuestions, isLoading, isError} = useQuery({
         // Keep the unscoped key identical to the page's prefetch so global
         // practice still hydrates from the server.
         queryKey: curriculumId
@@ -72,6 +87,22 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
             ? getCurriculumQuestionsByConceptId(conceptId, curriculumId)
             : getQuestionsByConceptId(conceptId),
     });
+
+    // Shuffle each question's options so retakers can't memorize positions.
+    // useMemo keeps the order fixed for the session; it reshuffles only when the
+    // questions load or shuffleKey changes (restart).
+    const questions = useMemo(() => {
+        if (!rawQuestions) {
+            return rawQuestions;
+        }
+
+        return rawQuestions.map((question) => ({
+            ...question,
+            options: shuffle(question.options),
+        }));
+        // shuffleKey drives the reshuffle on restart.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [rawQuestions, shuffleKey]);
 
     const questionIds = useMemo(
         () => questions?.map((question) => question.questionId) ?? [],
@@ -254,6 +285,8 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
         setCheckedQuestions({});
         setRatingSnapshots({});
         setIsComplete(false);
+        // Restart is a fresh session: reshuffle so the order changes on retake.
+        setShuffleKey((key) => key + 1);
     }
 
     if (isConceptLoading || isLoading) {
