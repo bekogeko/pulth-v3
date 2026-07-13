@@ -25,6 +25,45 @@ export async function getSubjects() {
         .orderBy(asc(subjectTable.name));
 }
 
+export async function getSubjectsWithCurriculums() {
+    type CurriculumJson = {
+        id: number;
+        name: string;
+        slug: string;
+    };
+
+    const curriculumsSq = database
+        .select({
+            curriculums: sql<CurriculumJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${curriculum.id},
+                            'name', ${curriculum.name},
+                            'slug', ${curriculum.slug}
+                        )
+                        order by ${curriculum.id}
+                    ),
+                    '[]'::json
+                )
+            `.as("curriculums"),
+        })
+        .from(curriculum)
+        .where(eq(curriculum.subjectId, subjectTable.id))
+        .as("subject_curriculums_sq");
+
+    return database
+        .select({
+            id: subjectTable.id,
+            name: subjectTable.name,
+            slug: subjectTable.slug,
+            curriculums: sql<CurriculumJson[]>`coalesce(${curriculumsSq.curriculums}, '[]'::json)`,
+        })
+        .from(subjectTable)
+        .leftJoinLateral(curriculumsSq, sql`true`)
+        .orderBy(asc(subjectTable.name));
+}
+
 export async function getSubjectSlugs() {
     return database
         .select({slug: subjectTable.slug})
