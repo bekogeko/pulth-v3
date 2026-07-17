@@ -1,9 +1,8 @@
 import type {Metadata} from "next";
 import Link from "next/link";
-import {ArrowRight, Library} from "lucide-react";
+import {ArrowRight, LibraryBig} from "lucide-react";
 
-import {getSubjects} from "@/app/actions/subject";
-import {Button} from "@/components/ui/button";
+import {getSubjectsWithCurriculums} from "@/app/actions/subject";
 
 export const revalidate = false;
 
@@ -13,40 +12,90 @@ export const metadata: Metadata = {
 };
 
 export default async function SubjectsPage() {
-    const subjects = await getSubjects();
+    const subjects = await getSubjectsWithCurriculums();
+
+    const curriculumCount = subjects.reduce(
+        (total, subject) => total + subject.curriculums.length,
+        0,
+    );
+    const stats = [
+        {label: "Subjects", value: subjects.length},
+        {label: "Curriculums", value: curriculumCount},
+    ];
 
     return (
         <main className="min-h-dvh bg-background text-foreground">
             <section className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-                <div className="mb-8 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <header className="mb-10 space-y-6 border-b border-border pb-8">
                     <div className="space-y-3">
-                        <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-                            <Library className="size-5" />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-semibold tracking-normal">Subjects</h1>
-                            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                                Browse subjects and explore the curriculums within each one.
-                            </p>
-                        </div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">
+                            Browse
+                        </p>
+                        <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
+                            Subjects
+                        </h1>
+                        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                            Every subject on Pulth, with the curriculums you can follow inside each
+                            one.
+                        </p>
                     </div>
-                    <Button asChild variant="outline" size="lg">
-                        <Link href="/">Home</Link>
-                    </Button>
-                </div>
+
+                    <dl className="grid grid-cols-2 gap-3 sm:max-w-xs">
+                        {stats.map((stat) => (
+                            <div
+                                key={stat.label}
+                                className="rounded-lg border border-border bg-background p-4 shadow-sm"
+                            >
+                                <dt className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                    {stat.label}
+                                </dt>
+                                <dd className="mt-1 text-2xl font-semibold tracking-tight">{stat.value}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                </header>
 
                 {subjects.length > 0 ? (
-                    <div className="divide-y divide-border rounded-lg border border-border bg-card">
+                    <div className="grid gap-4 sm:grid-cols-2">
                         {subjects.map((subject) => (
-                            <div key={subject.id} className="p-5 transition-colors hover:bg-muted/40 sm:p-6">
-                                <Link href={`/${subject.slug}`} className="group block">
-                                    <div className="flex items-center justify-between gap-4">
-                                        <h2 className="text-xl font-semibold leading-snug group-hover:text-primary">
+                            <div
+                                key={subject.id}
+                                className="flex flex-col rounded-lg border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/50"
+                            >
+                                <Link
+                                    href={`/${subject.slug}`}
+                                    className="group flex items-center justify-between gap-3"
+                                >
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                            <LibraryBig className="size-4" />
+                                        </span>
+                                        <h2 className="truncate text-lg font-semibold leading-snug group-hover:text-primary">
                                             {subject.name}
                                         </h2>
-                                        <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
                                     </div>
+                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
                                 </Link>
+
+                                {subject.curriculums.length > 0 ? (
+                                    <ul className="mt-4 space-y-1 border-t border-border pt-4">
+                                        {subject.curriculums.map((item) => (
+                                            <li key={item.id}>
+                                                <Link
+                                                    href={`/${subject.slug}/${item.slug}`}
+                                                    className="group flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                                                >
+                                                    <span className="truncate">{item.name}</span>
+                                                    <ArrowRight className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="mt-4 border-t border-border pt-4 text-sm leading-6 text-muted-foreground">
+                                        No curriculums yet.
+                                    </p>
+                                )}
                             </div>
                         ))}
                     </div>

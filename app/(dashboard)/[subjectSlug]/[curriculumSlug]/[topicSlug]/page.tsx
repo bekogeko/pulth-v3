@@ -1,13 +1,21 @@
 import type {Metadata} from "next";
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {ArrowLeft, BookOpenCheck, Globe, Sparkles} from "lucide-react";
+import {Globe, Sparkles} from "lucide-react";
 
 import {
     getCurriculumTopicDetail,
     getCurriculumTopicSlugs,
 } from "@/app/actions/subject";
 import {AddQuestionButton} from "@/app/(dashboard)/[subjectSlug]/[curriculumSlug]/[topicSlug]/add-question-dialog";
+import {
+    Breadcrumb,
+    BreadcrumbItem,
+    BreadcrumbLink,
+    BreadcrumbList,
+    BreadcrumbPage,
+    BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import {Button} from "@/components/ui/button";
 
 export const revalidate = false;
@@ -60,66 +68,89 @@ export default async function CurriculumTopicPage({params}: CurriculumTopicPageP
     }
 
     const conceptCount = topic.concepts.length;
-    const questionCount = topic.concepts.reduce((total, concept) => total + concept.questionCount, 0);
+    const curriculumQuestionCount = topic.concepts.reduce(
+        (total, concept) => total + concept.curriculumQuestionCount,
+        0,
+    );
+    const globalQuestionCount = topic.concepts.reduce(
+        (total, concept) => total + concept.questionCount,
+        0,
+    );
+    const stats = [
+        {label: "Concepts", value: conceptCount},
+        {label: "Questions", value: curriculumQuestionCount},
+        {label: "Global", value: globalQuestionCount},
+    ];
 
     return (
         <main className="min-h-dvh bg-background text-foreground">
             <section className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
-                <div className="mb-8 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <header className="mb-10 space-y-6 border-b border-border pb-8">
                     <div className="space-y-3">
-                        <div className="flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary">
-                            <BookOpenCheck className="size-5" />
-                        </div>
-                        <div>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
-                                <Link
-                                    href={`/${topic.subjectSlug}`}
-                                    className="transition-colors hover:text-primary"
-                                >
-                                    {topic.subjectName}
-                                </Link>
-                                <span>/</span>
-                                <Link
-                                    href={`/${topic.subjectSlug}/${topic.slug}`}
-                                    className="transition-colors hover:text-primary"
-                                >
-                                    {topic.name}
-                                </Link>
-                            </div>
-                            <h1 className="mt-2 text-3xl font-semibold tracking-normal">{topic.topicName}</h1>
-                            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                                {topic.topicDescription}
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                            <span className="rounded-full bg-muted px-3 py-1">
-                                {conceptCount} concept{conceptCount === 1 ? "" : "s"}
-                            </span>
-                            <span className="rounded-full bg-muted px-3 py-1">
-                                {questionCount} question{questionCount === 1 ? "" : "s"}
-                            </span>
-                        </div>
+                        <Breadcrumb>
+                            <BreadcrumbList>
+                                <BreadcrumbItem>
+                                    <BreadcrumbLink asChild>
+                                        <Link href="/subjects">Subjects</Link>
+                                    </BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator />
+                                <BreadcrumbItem>
+                                    <BreadcrumbLink asChild>
+                                        <Link href={`/${topic.subjectSlug}`}>
+                                            {topic.subjectName}
+                                        </Link>
+                                    </BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator />
+                                <BreadcrumbItem>
+                                    <BreadcrumbLink asChild>
+                                        <Link href={`/${topic.subjectSlug}/${topic.slug}`}>
+                                            {topic.name}
+                                        </Link>
+                                    </BreadcrumbLink>
+                                </BreadcrumbItem>
+                                <BreadcrumbSeparator />
+                                <BreadcrumbItem>
+                                    <BreadcrumbPage>{topic.topicName}</BreadcrumbPage>
+                                </BreadcrumbItem>
+                            </BreadcrumbList>
+                        </Breadcrumb>
+                        <h1 className="text-3xl font-semibold tracking-normal text-balance sm:text-4xl">
+                            {topic.topicName}
+                        </h1>
+                        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                            {topic.topicDescription}
+                        </p>
                     </div>
-                    <Button asChild variant="outline" size="lg">
-                        <Link href={`/${topic.subjectSlug}/${topic.slug}`}>
-                            <ArrowLeft />
-                            Back to curriculum
-                        </Link>
-                    </Button>
-                </div>
 
-                <section className="space-y-3" aria-labelledby="curriculum-topic-concepts-heading">
+                    <dl className="grid grid-cols-3 gap-3 sm:max-w-md">
+                        {stats.map((stat) => (
+                            <div
+                                key={stat.label}
+                                className="rounded-lg border border-border bg-background p-4 shadow-sm"
+                            >
+                                <dt className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                    {stat.label}
+                                </dt>
+                                <dd className="mt-1 text-2xl font-semibold tracking-tight">{stat.value}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                </header>
+
+                <section className="space-y-4" aria-labelledby="curriculum-topic-concepts-heading">
                     <div className="space-y-1">
-                        <h2 id="curriculum-topic-concepts-heading" className="text-lg font-semibold">
+                        <h2 id="curriculum-topic-concepts-heading" className="text-2xl font-semibold tracking-normal">
                             Concepts
                         </h2>
-                        <p className="text-sm text-muted-foreground">
-                            Concepts mapped to this curriculum topic.
+                        <p className="text-sm leading-6 text-muted-foreground">
+                            Concepts mapped to this topic — practice each one on its own.
                         </p>
                     </div>
 
                     {topic.concepts.length > 0 ? (
-                        <ol className="divide-y divide-border rounded-lg border border-border bg-card">
+                        <ol className="space-y-3">
                             {topic.concepts.map((concept, index) => {
                                 const displayName = concept.localName || concept.name;
                                 const displayDescription = concept.localDescription
@@ -129,14 +160,14 @@ export default async function CurriculumTopicPage({params}: CurriculumTopicPageP
                                 return (
                                     <li
                                         key={concept.id}
-                                        className="grid gap-4 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:p-6"
+                                        className="grid gap-4 rounded-lg border border-border bg-card p-5 shadow-sm sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:p-6"
                                     >
                                         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                                             {index + 1}
                                         </span>
                                         <div className="min-w-0 space-y-1">
                                             <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                                <h3 className="min-w-0 text-lg font-semibold leading-snug">
+                                                <h3 className="min-w-0 text-lg font-semibold leading-snug text-balance">
                                                     {displayName}
                                                 </h3>
                                                 {concept.localName ? (
@@ -201,7 +232,7 @@ export default async function CurriculumTopicPage({params}: CurriculumTopicPageP
                         </ol>
                     ) : (
                         <div className="rounded-lg border border-dashed border-border bg-muted/30 px-5 py-12 text-center">
-                            <h2 className="text-base font-semibold">No concepts yet</h2>
+                            <h3 className="text-base font-semibold">No concepts yet</h3>
                             <p className="mt-2 text-sm text-muted-foreground">
                                 Concepts for this topic will appear here once they are mapped in the curriculum.
                             </p>

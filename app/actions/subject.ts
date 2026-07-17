@@ -90,9 +90,12 @@ export async function getSubjectWithCurriculums(slug: string) {
             id: curriculum.id,
             name: curriculum.name,
             slug: curriculum.slug,
+            topicCount: count(curriculumTopic.id),
         })
         .from(curriculum)
+        .leftJoin(curriculumTopic, eq(curriculumTopic.curriculumId, curriculum.id))
         .where(eq(curriculum.subjectId, subject.id))
+        .groupBy(curriculum.id)
         .orderBy(asc(curriculum.id));
 
     return {...subject, curriculums};
@@ -147,9 +150,15 @@ export async function getCurriculumDetail(subjectSlug: string, curriculumSlug: s
             name: curriculumTopic.name,
             slug: curriculumTopic.slug,
             description: curriculumTopic.description,
+            conceptCount: count(curriculumTopicConcepts.conceptId),
         })
         .from(curriculumTopic)
+        .leftJoin(curriculumTopicConcepts, and(
+            eq(curriculumTopicConcepts.curriculumId, curriculumTopic.curriculumId),
+            eq(curriculumTopicConcepts.curriculumTopicId, curriculumTopic.id),
+        ))
         .where(eq(curriculumTopic.curriculumId, detail.id))
+        .groupBy(curriculumTopic.id)
         .orderBy(asc(curriculumTopic.position), asc(curriculumTopic.id));
 
     return {...detail, topics};
