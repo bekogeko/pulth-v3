@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 import { eq } from "drizzle-orm";
 
-import { articleTable, conceptTable } from "@/db/schema";
+import { articleTable, conceptTable, curriculum, curriculumTopic, subjectTable } from "@/db/schema";
 import { database } from "@/lib/database";
 import { getAbsoluteUrl } from "@/lib/site-url";
 
@@ -45,7 +45,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
 
     try {
-        const [concepts, articles] = await Promise.all([
+        const [concepts, articles, topics, subjects, curriculums] = await Promise.all([
             database.select({ slug: conceptTable.slug }).from(conceptTable),
             database
                 .select({
@@ -56,6 +56,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 })
                 .from(articleTable)
                 .where(eq(articleTable.isPublished, true)),
+            database.select({ slug: curriculumTopic.slug }).from(curriculumTopic),
+            
         ]);
 
         return [
@@ -65,12 +67,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                 changeFrequency: "weekly" as const,
                 priority: 0.8,
             })),
+            ...topics.map(({ slug }) => ({
+                url: route(`/quiz/topics/${slug}/solve`),
+                changeFrequency: "weekly" as const,
+                priority: 0.8,
+            })),
             ...articles.map(({ slug, updatedAt, publishedAt, createdAt }) => ({
                 url: route(`/articles/${slug}`),
                 lastModified: updatedAt ?? publishedAt ?? createdAt,
                 changeFrequency: "weekly" as const,
                 priority: 0.7,
             })),
+
         ];
     } catch {
         return staticRoutes;
