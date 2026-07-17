@@ -1,9 +1,10 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { env } from '@/lib/env';
 
 export const database = drizzle({
     connection: {
-        connectionString: process.env.DATABASE_URL,
-        max: Number(process.env.DATABASE_POOL_MAX ?? 1),
+        connectionString: env.DATABASE_URL,
+        max: env.DATABASE_POOL_MAX ?? 1,
         ssl: true,
     },
 });
