@@ -11,6 +11,8 @@ import {
     getCurriculumQuestionsByConceptId,
     getQuestionConceptRatings,
     getQuestionsByConceptId,
+    getQuestionsByTopicId,
+    getTopicById,
     submitUserAnswer
 } from "@/app/(dashboard)/quiz/quiz";
 import type {QuestionConceptRating} from "@/app/(dashboard)/quiz/quiz";
@@ -23,8 +25,14 @@ import {RadioGroup, RadioGroupItem} from "@/components/ui/radio-group";
 import {Skeleton} from "@/components/ui/skeleton";
 import {cn} from "@/lib/utils";
 
+// What the solver practices: a single concept (optionally curriculum-scoped via
+// the `curriculum` search param) or a whole curriculum topic.
+export type QuizTarget =
+    | {type: "concept"; id: number}
+    | {type: "topic"; id: number};
+
 type QuizSolverProps = {
-    conceptId: number;
+    target: QuizTarget;
 };
 
 type RatingSnapshot = {
@@ -54,13 +62,16 @@ function shuffle<T>(items: T[]): T[] {
     return shuffled;
 }
 
-export function QuizSolver({conceptId}: QuizSolverProps) {
+export function QuizSolver({target}: QuizSolverProps) {
     const queryClient = useQueryClient();
     const searchParams = useSearchParams();
+    const isTopicPractice = target.type === "topic";
     const curriculumParam = searchParams.get("curriculum");
     // Read curriculum scope on the client so the solve page itself stays static
     // (reading searchParams in the server component would force dynamic rendering).
-    const curriculumId = curriculumParam && /^\d+$/.test(curriculumParam)
+    // Topic practice is already scoped to the topic's own curriculum, so the
+    // param only applies to concept practice.
+    const curriculumId = !isTopicPractice && curriculumParam && /^\d+$/.test(curriculumParam)
         ? Number.parseInt(curriculumParam, 10)
         : null;
     const [selectedOptions, setSelectedOptions] = useState<Record<number, string>>({});
@@ -72,20 +83,26 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
     // Bumped on restart to reshuffle options for the next session.
     const [shuffleKey, setShuffleKey] = useState(0);
 
-    const {data: conceptData, isLoading: isConceptLoading} = useQuery({
-        queryKey: ["concept", conceptId],
-        queryFn: () => getConceptById(conceptId),
+    const {data: targetData, isLoading: isTargetLoading} = useQuery({
+        queryKey: [target.type, target.id],
+        queryFn: () => isTopicPractice ? getTopicById(target.id) : getConceptById(target.id),
     });
 
     const {data: rawQuestions, isLoading, isError} = useQuery({
-        // Keep the unscoped key identical to the page's prefetch so global
-        // practice still hydrates from the server.
+        // Keep the unscoped keys identical to the pages' prefetches so topic and
+        // global concept practice still hydrate from the server.
         queryKey: curriculumId
-            ? ["concept", conceptId, "questions", "curriculum", curriculumId]
-            : ["concept", conceptId, "questions"],
-        queryFn: () => curriculumId
-            ? getCurriculumQuestionsByConceptId(conceptId, curriculumId)
-            : getQuestionsByConceptId(conceptId),
+            ? [target.type, target.id, "questions", "curriculum", curriculumId]
+            : [target.type, target.id, "questions"],
+        queryFn: () => {
+            if (isTopicPractice) {
+                return getQuestionsByTopicId(target.id);
+            }
+
+            return curriculumId
+                ? getCurriculumQuestionsByConceptId(target.id, curriculumId)
+                : getQuestionsByConceptId(target.id);
+        },
     });
 
     // Shuffle each question's options so retakers can't memorize positions.
@@ -114,7 +131,7 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
         enabled: questionIds.length > 0,
     });
 
-    const concept = conceptData?.[0];
+    const practiceTarget = targetData?.[0];
     const lastQuestionIndex = Math.max((questions?.length ?? 1) - 1, 0);
     const activeQuestionIndex = Math.min(currentQuestionIndex, lastQuestionIndex);
     const currentQuestion = questions?.[activeQuestionIndex];
@@ -289,7 +306,7 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
         setShuffleKey((key) => key + 1);
     }
 
-    if (isConceptLoading || isLoading) {
+    if (isTargetLoading || isLoading) {
         return <QuizSolveSkeleton withPagePadding={false} />;
     }
 
@@ -312,7 +329,7 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                 <CardHeader className="gap-4 border-b border-border/60 bg-gradient-to-br from-primary/8 via-background to-background">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                         <div className="space-y-2">
-                            {isConceptLoading ? (
+                            {isTargetLoading ? (
                                 <>
                                     <Skeleton className="h-8 w-52" />
                                     <Skeleton className="h-4 w-80 max-w-full" />
@@ -323,10 +340,10 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                                         keep this visible title as a styled div to avoid a
                                         duplicate heading after hydration. */}
                                     <div className="text-2xl font-semibold leading-none tracking-tight">
-                                        {concept?.name ?? "Concept"}
+                                        {practiceTarget?.name ?? (isTopicPractice ? "Topic" : "Concept")}
                                     </div>
                                     <CardDescription className="max-w-2xl text-sm leading-6">
-                                        {concept?.description ?? "Choose one answer for each question."}
+                                        {practiceTarget?.description || "Choose one answer for each question."}
                                     </CardDescription>
                                 </>
                             )}
@@ -338,7 +355,9 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                         {questions?.length ?? 0} questions
                     </span>
                     <span className="rounded-full bg-muted px-3 py-1">
-                        {curriculumId ? "Curriculum practice" : "Concept practice"}
+                        {isTopicPractice
+                            ? "Topic practice"
+                            : curriculumId ? "Curriculum practice" : "Concept practice"}
                     </span>
                     {questions?.length ? (
                         <span className="rounded-full bg-muted px-3 py-1">
@@ -562,7 +581,9 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
             {isError ? (
                 <Card className="border-destructive/30">
                     <CardHeader>
-                        <CardTitle>Couldn&apos;t load this concept practice</CardTitle>
+                        <CardTitle>
+                            Couldn&apos;t load this {isTopicPractice ? "topic" : "concept"} practice
+                        </CardTitle>
                         <CardDescription>
                             Please refresh and try again.
                         </CardDescription>
@@ -575,7 +596,9 @@ export function QuizSolver({conceptId}: QuizSolverProps) {
                     <CardHeader>
                         <CardTitle>No questions yet</CardTitle>
                         <CardDescription>
-                            Attach questions to this concept and they&apos;ll appear here.
+                            {isTopicPractice
+                                ? "Questions attached to this topic's concepts will appear here."
+                                : "Attach questions to this concept and they'll appear here."}
                         </CardDescription>
                     </CardHeader>
                 </Card>

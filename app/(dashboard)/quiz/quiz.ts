@@ -6,6 +6,8 @@ import {revalidatePath} from "next/cache";
 
 import {
     conceptTable,
+    curriculumTopic,
+    curriculumTopicConcepts,
     questionConceptRatingTable,
     questionConceptsTable,
     questionOptionTable,
@@ -1020,6 +1022,99 @@ export async function getCurriculumQuestionsByConceptId(conceptId: number, curri
         .where(and(
             eq(questionConceptsTable.conceptId, concept.id),
             eq(questionTable.curriculumId, curriculumId),
+        ))
+        .groupBy(
+            questionTable.id,
+            questionTable.question,
+            questionTable.body
+        );
+}
+
+export async function getTopicById(topicId: number) {
+    if (!Number.isInteger(topicId)) {
+        return [];
+    }
+
+    return database
+        .select({
+            id: curriculumTopic.id,
+            name: curriculumTopic.name,
+            slug: curriculumTopic.slug,
+            description: curriculumTopic.description,
+        })
+        .from(curriculumTopic)
+        .where(eq(curriculumTopic.id, topicId));
+}
+
+export async function getTopicBySlug(slug: string) {
+    return database
+        .select({
+            id: curriculumTopic.id,
+            name: curriculumTopic.name,
+            slug: curriculumTopic.slug,
+            description: curriculumTopic.description,
+        })
+        .from(curriculumTopic)
+        .where(eq(curriculumTopic.slug, slug));
+}
+
+// Every question tagged with a concept mapped to the topic, restricted to the
+// curriculum that owns the topic. Powers the topic-level "Solve questions"
+// action. The IN subquery dedupes questions tagged with several of the topic's
+// concepts.
+export async function getQuestionsByTopicId(topicId: number) {
+    if (!Number.isInteger(topicId)) {
+        throw new Error("Topic not found");
+    }
+
+    const topic = await database
+        .select({
+            id: curriculumTopic.id,
+            curriculumId: curriculumTopic.curriculumId,
+        })
+        .from(curriculumTopic)
+        .where(eq(curriculumTopic.id, topicId))
+        .limit(1)
+        .then((results) => results[0]);
+
+    if (!topic) {
+        throw new Error("Topic not found");
+    }
+
+    return database
+        .select({
+            questionId: questionTable.id,
+            question: questionTable.question,
+            body: questionTable.body,
+            options: sql<QuestionOptionJson[]>`
+                coalesce(
+                    json_agg(
+                        json_build_object(
+                            'id', ${questionOptionTable.id},
+                            'option', ${questionOptionTable.option},
+                            'isCorrect', ${questionOptionTable.isCorrect}
+                        )
+                        order by ${questionOptionTable.id}
+                    ) filter (where ${questionOptionTable.id} is not null),
+                    '[]'::json
+                )
+            `,
+        })
+        .from(questionTable)
+        .leftJoin(questionOptionTable, eq(questionTable.id, questionOptionTable.questionId))
+        .where(and(
+            eq(questionTable.curriculumId, topic.curriculumId),
+            inArray(
+                questionTable.id,
+                database
+                    .select({questionId: questionConceptsTable.questionId})
+                    .from(questionConceptsTable)
+                    .innerJoin(
+                        curriculumTopicConcepts,
+                        eq(curriculumTopicConcepts.conceptId, questionConceptsTable.conceptId)
+                    )
+                    .where(eq(curriculumTopicConcepts.curriculumTopicId, topic.id))
+            ),
         ))
         .groupBy(
             questionTable.id,

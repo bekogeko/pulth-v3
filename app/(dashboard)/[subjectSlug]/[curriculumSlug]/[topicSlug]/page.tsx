@@ -137,6 +137,20 @@ export default async function CurriculumTopicPage({params}: CurriculumTopicPageP
                             </div>
                         ))}
                     </dl>
+
+                    {curriculumQuestionCount > 0 ? (
+                        <Button asChild className="w-full sm:w-auto">
+                            <Link href={`/quiz/topics/${topic.topicSlug}/solve`} prefetch={false}>
+                                <Sparkles />
+                                Solve questions
+                            </Link>
+                        </Button>
+                    ) : (
+                        <Button className="w-full sm:w-auto" disabled>
+                            <Sparkles />
+                            Solve questions
+                        </Button>
+                    )}
                 </header>
 
                 <section className="space-y-4" aria-labelledby="curriculum-topic-concepts-heading">

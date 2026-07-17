@@ -5,7 +5,8 @@ import {notFound, permanentRedirect} from "next/navigation";
 
 import {QuizSolver} from "@/app/(dashboard)/quiz/QuizSolver";
 import {QuizSolveSkeleton} from "@/app/(dashboard)/quiz/QuizSolveSkeleton";
-import {QuestionBodyBlock} from "@/app/(dashboard)/quiz/QuestionBodyBlock";
+import {QuestionOverview} from "@/app/(dashboard)/quiz/QuestionOverview";
+import {createPracticeDescription} from "@/app/(dashboard)/quiz/practice-description";
 import {getAllConcepts, getConceptByIdentifier, getQuestionsByConceptId} from "@/app/(dashboard)/quiz/quiz";
 import {getAbsoluteUrl} from "@/lib/site-url";
 
@@ -22,30 +23,6 @@ type SolveConceptPageProps = {
 };
 
 type ConceptQuestion = Awaited<ReturnType<typeof getQuestionsByConceptId>>[number];
-
-function createDescription(name: string, description: string | null | undefined, questionCount: number) {
-    const lead = questionCount > 0
-        ? `Practice ${name} with ${questionCount} ${questionCount === 1 ? "question" : "questions"} on Pulth.`
-        : `Practice ${name} on Pulth.`;
-    // Generic detail keeps the meta description from being flagged as too short
-    // when a concept has no stored description (the common case).
-    const generic = "Answer interactive multiple-choice questions, check your answers instantly, and track your progress as you learn.";
-    const body = description?.trim();
-
-    let value = body ? `${lead} ${body}` : `${lead} ${generic}`;
-    if (value.length < 120) {
-        value = `${value} ${generic}`;
-    }
-
-    if (value.length <= 160) {
-        return value;
-    }
-
-    // Truncate on a word boundary so the description reads cleanly.
-    const truncated = value.slice(0, 157);
-    const lastSpace = truncated.lastIndexOf(" ");
-    return `${(lastSpace > 140 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}...`;
-}
 
 function createConceptJsonLd(
     concept: {name: string; description: string | null; slug: string},
@@ -71,41 +48,6 @@ function createConceptJsonLd(
     };
 }
 
-function QuestionOverview({questions}: {questions: ConceptQuestion[]}) {
-    if (!questions.length) {
-        return null;
-    }
-
-    return (
-        <section className="mx-auto w-full max-w-4xl px-4 pb-10 md:px-6" aria-labelledby="concept-question-overview">
-            <div className="rounded-lg border border-border/70 bg-background p-5">
-                <h2 id="concept-question-overview" className="text-lg font-semibold tracking-tight">
-                    Questions in this concept practice
-                </h2>
-                <ol className="mt-4 space-y-5">
-                    {questions.map((question, index) => (
-                        <li key={question.questionId} className="space-y-3">
-                            <h3 className="font-medium leading-7">
-                                {index + 1}. {question.question}
-                            </h3>
-                            <QuestionBodyBlock body={question.body} className="rounded-lg" />
-                            {question.options?.length ? (
-                                <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                                    {question.options.map((option) => (
-                                        <li key={option.id} className="rounded-md border border-border/60 px-3 py-2">
-                                            {option.option}
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : null}
-                        </li>
-                    ))}
-                </ol>
-            </div>
-        </section>
-    );
-}
-
 export async function generateMetadata({params}: SolveConceptPageProps): Promise<Metadata> {
     const {concept: conceptParam} = await params;
     const concept = await getConceptByIdentifier(conceptParam).then((result) => result[0]);
@@ -121,7 +63,7 @@ export async function generateMetadata({params}: SolveConceptPageProps): Promise
     const questions = await getQuestionsByConceptId(concept.id);
     const url = getAbsoluteUrl(`/quiz/concepts/${concept.slug}/solve`);
     const title = `Practice ${concept.name} Questions | Pulth`;
-    const description = createDescription(concept.name, concept.description, questions.length);
+    const description = createPracticeDescription(concept.name, concept.description, questions.length);
 
     return {
         title,
@@ -194,11 +136,11 @@ export default async function SolveConceptPage({params}: SolveConceptPageProps) 
                         boundary is the segment's loading.tsx, which would deopt the whole
                         page (JSON-LD + overview) to client rendering. */}
                     <Suspense fallback={<QuizSolveSkeleton withPagePadding={false} />}>
-                        <QuizSolver key={conceptId} conceptId={conceptId} />
+                        <QuizSolver key={conceptId} target={{type: "concept", id: conceptId}} />
                     </Suspense>
                 </div>
             </HydrationBoundary>
-            <QuestionOverview questions={questions} />
+            <QuestionOverview title="Questions in this concept practice" questions={questions} />
         </>
     );
 }
